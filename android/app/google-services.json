@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1014571855006",
+    "project_id": "presta-ya-9ffc5",
+    "storage_bucket": "presta-ya-9ffc5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1014571855006:android:d724d75b11f1184d0a5f8f",
+        "android_client_info": {
+          "package_name": "com.prestaya.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1014571855006-a4uunlh545vve7anu41clcufl3k2s9qv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.prestaya.app",
+            "certificate_hash": "2ef358d6769487c605e4124cd264d2e79f438959"
+          }
+        },
+        {
+          "client_id": "1014571855006-e7h8pmlebp3aummncmnm67pcgauq1kqq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC326au2zcDA7Ao5JQmp4iooIVjQuO4fG0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1014571855006-e7h8pmlebp3aummncmnm67pcgauq1kqq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
