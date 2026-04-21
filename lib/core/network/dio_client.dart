@@ -163,4 +163,17 @@ class DioClient {
       rethrow;
     }
   }
+  // Método para descargar bytes (archivos)
+  Future<List<int>> downloadBytes(String url, Map<String, dynamic>? queryParameters) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        url,
+        queryParameters: queryParameters,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return response.data!;
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

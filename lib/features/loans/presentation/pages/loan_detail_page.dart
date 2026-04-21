@@ -219,8 +219,15 @@ class LoanDetailPage extends StatelessWidget {
           _buildDetailRow(
             'Fecha Inicio', 
             DateFormat('dd/MM/yyyy').format(loan.dueDate.subtract(const Duration(days: 30))), 
+            'Frecuencia', 
+            _translateFrequency(loan.frequency)
+          ),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 15), child: Divider(color: Color(0xFFF1F5F9))),
+          _buildDetailRow(
             'Próximo Vencimiento', 
-            DateFormat('dd/MM/yyyy').format(loan.dueDate)
+            DateFormat('dd/MM/yyyy').format(loan.dueDate),
+            '',
+            ''
           ),
         ],
       ),
@@ -365,7 +372,12 @@ class LoanDetailPage extends StatelessWidget {
                     child: DropdownButton<String>(
                       value: frequency,
                       isExpanded: true,
-                      items: ['DAILY', 'WEEKLY', 'MONTHLY'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+                      items: [
+                        {'val': 'DAILY', 'label': 'Diario'},
+                        {'val': 'WEEKLY', 'label': 'Semanal'},
+                        {'val': 'BIWEEKLY', 'label': 'Quincenal'},
+                        {'val': 'MONTHLY', 'label': 'Mensual'},
+                      ].map((f) => DropdownMenuItem(value: f['val'] as String, child: Text(f['label'] as String))).toList(),
                       onChanged: (val) => setModalState(() => frequency = val!),
                     ),
                   ),
@@ -393,5 +405,15 @@ class LoanDetailPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _translateFrequency(String? freq) {
+    switch (freq?.toUpperCase()) {
+      case 'DAILY': return 'Diario';
+      case 'WEEKLY': return 'Semanal';
+      case 'BIWEEKLY': return 'Quincenal';
+      case 'MONTHLY': return 'Mensual';
+      default: return freq ?? 'No definida';
+    }
   }
 }

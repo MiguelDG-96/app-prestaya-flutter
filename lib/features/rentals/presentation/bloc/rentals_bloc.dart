@@ -12,7 +12,10 @@ class RentalsBloc extends Bloc<RentalsEvent, RentalsState> {
       final result = await repository.addRental(event.rental);
       result.fold(
         (failure) => emit(RentalsError(failure.message)),
-        (rental) => emit(RentalAddedSuccess(rental)),
+        (rental) {
+          emit(RentalAddedSuccess(rental));
+          add(const GetRentalsRequested());
+        },
       );
     });
 
@@ -34,7 +37,10 @@ class RentalsBloc extends Bloc<RentalsEvent, RentalsState> {
       );
       result.fold(
         (failure) => emit(RentalsError(failure.message)),
-        (_) => emit(RentalPaymentSuccess()),
+        (_) {
+          emit(RentalPaymentSuccess());
+          add(const GetRentalsRequested());
+        },
       );
     });
 
@@ -43,7 +49,10 @@ class RentalsBloc extends Bloc<RentalsEvent, RentalsState> {
       final result = await repository.deleteRental(event.rentalId);
       result.fold(
         (failure) => emit(RentalsError(failure.message)),
-        (_) => emit(RentalsInitial()), // O podrías emitir un estado de éxito específico
+        (_) {
+          emit(RentalsInitial()); 
+          add(const GetRentalsRequested());
+        },
       );
     });
 
@@ -52,7 +61,10 @@ class RentalsBloc extends Bloc<RentalsEvent, RentalsState> {
       final result = await repository.updateRental(event.id, event.data);
       result.fold(
         (failure) => emit(RentalsError(failure.message)),
-        (rental) => emit(RentalAddedSuccess(rental)), // Reusar éxito para cerrar
+        (rental) {
+          emit(RentalAddedSuccess(rental));
+          add(const GetRentalsRequested());
+        },
       );
     });
   }

@@ -3,7 +3,6 @@ import 'package:app_prestaya_flutter/core/theme/app_theme.dart';
 import 'home_page.dart';
 import 'package:app_prestaya_flutter/features/clients/presentation/pages/clients_page.dart';
 import 'package:app_prestaya_flutter/features/loans/presentation/pages/loans_page.dart';
-
 import 'package:app_prestaya_flutter/features/rentals/presentation/pages/rentals_page.dart';
 
 import 'package:app_prestaya_flutter/core/widgets/register_options_sheet.dart';
@@ -12,7 +11,6 @@ import 'package:app_prestaya_flutter/features/notifications/presentation/bloc/no
 import 'package:app_prestaya_flutter/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:app_prestaya_flutter/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:app_prestaya_flutter/core/services/firebase_service.dart';
-import 'package:app_prestaya_flutter/features/profile/presentation/pages/profile_page.dart';
 import 'package:app_prestaya_flutter/injection_container.dart';
 
 class MainNavigationPage extends StatefulWidget {
@@ -30,19 +28,16 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   void initState() {
     super.initState();
     _pages = [
-      HomePage(onNavigateToLoans: () => setState(() => _currentIndex = 1)),
+      HomePage(onNavigateToLoans: () => setState(() => _currentIndex = 2)),
+      const ClientsPage(),
       const LoansPage(),
       const RentalsPage(),
-      const ClientsPage(),
-      const ProfilePage(),
     ];
 
     // Cargar notificaciones al iniciar si ya está autenticado
     final authState = context.read<AuthBloc>().state;
     if (authState is Authenticated) {
       context.read<NotificationsBloc>().add(LoadNotificationsRequested(authState.user.email));
-      
-      // Enviar Token de Firebase al Backend
       _updatePushToken();
     }
   }
@@ -52,10 +47,9 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       final token = await FirebaseService.getToken();
       if (token != null) {
         await sl<AuthRemoteDataSource>().updatePushToken(token);
-        print('Push Token sincronizado con el servidor: $token');
       }
     } catch (e) {
-      print('Error sincronizando Push Token: $e');
+      debugPrint('Error sincronizando Push Token: $e');
     }
   }
 
@@ -87,7 +81,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
             // Círculo Animado Premium
             AnimatedPositioned(
               duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutBack, // Efecto rebote suave
+              curve: Curves.easeOutBack,
               left: _calculateCirclePosition(itemWidth),
               top: 10,
               child: Container(
@@ -114,7 +108,10 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => RegisterOptionsSheet.show(context),
+        onPressed: () => RegisterOptionsSheet.show(
+          context,
+          onTabChange: (index) => setState(() => _currentIndex = index),
+        ),
         backgroundColor: AppTheme.primary,
         shape: const CircleBorder(),
         child: const Icon(Icons.add, color: Colors.white, size: 30),

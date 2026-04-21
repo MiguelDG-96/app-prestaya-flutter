@@ -184,24 +184,36 @@ class _RentalsPageState extends State<RentalsPage> {
   }
 
   Widget _buildRentalCard(RentalEntity rental) {
+    final now = DateTime.now();
+    final isDueToday = rental.dueDate != null && 
+                       rental.dueDate!.year == now.year && 
+                       rental.dueDate!.month == now.month && 
+                       rental.dueDate!.day == now.day;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(25),
+        border: isDueToday ? Border.all(color: AppTheme.primary, width: 2) : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+            color: isDueToday ? AppTheme.primary.withOpacity(0.1) : Colors.black.withOpacity(0.04), 
+            blurRadius: 15, 
+            offset: const Offset(0, 8)
           ),
         ],
       ),
       child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => RentalDetailPage(rental: rental)),
-        ),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => RentalDetailPage(rental: rental)),
+          );
+          if (context.mounted) {
+            context.read<RentalsBloc>().add(GetRentalsRequested());
+          }
+        },
         borderRadius: BorderRadius.circular(25),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,21 +245,38 @@ class _RentalsPageState extends State<RentalsPage> {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF7ED),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'PENDIENTE',
-                              style: TextStyle(
-                                color: Color(0xFFC2410C),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                          if (isDueToday)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                '🔥 COBRAR HOY',
+                                style: TextStyle(
+                                  color: AppTheme.primary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF7ED),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'PENDIENTE',
+                                style: TextStyle(
+                                  color: Color(0xFFC2410C),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -334,11 +363,15 @@ class _RentalsPageState extends State<RentalsPage> {
             padding: const EdgeInsets.fromLTRB(20, 15, 20, 20),
             child: Row(
               children: [
-                const Icon(Icons.calendar_month_outlined, size: 16, color: AppTheme.textSecondary),
+                Icon(Icons.calendar_month_outlined, size: 16, color: isDueToday ? AppTheme.primary : AppTheme.textSecondary),
                 const SizedBox(width: 8),
                 Text(
                   'Vence: ${rental.dueDate != null ? DateFormat('d/M/yyyy').format(rental.dueDate!) : 'N/A'}',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  style: TextStyle(
+                    color: isDueToday ? AppTheme.primary : AppTheme.textSecondary, 
+                    fontSize: 13,
+                    fontWeight: isDueToday ? FontWeight.bold : FontWeight.normal,
+                  ),
                 ),
               ],
             ),

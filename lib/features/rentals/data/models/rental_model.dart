@@ -19,14 +19,23 @@ class RentalModel extends RentalEntity {
   });
 
   factory RentalModel.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic date) {
+      if (date == null) return DateTime.now();
+      try {
+        return DateTime.parse(date.toString());
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+
     return RentalModel(
-      id: json['id'],
+      id: json['id']?.toString(),
       tenant: json['tenant'] != null ? TenantModel.fromJson(json['tenant']) : null,
-      tenantId: json['tenantId'] ?? json['tenant_id'],
-      amount: (json['amount'] as num).toDouble(),
-      roomNumber: json['roomNumber'] ?? json['room_number'] ?? '',
-      startDate: DateTime.parse(json['startDate'] ?? json['start_date']),
-      dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : (json['due_date'] != null ? DateTime.parse(json['due_date']) : null),
+      tenantId: (json['tenantId'] ?? json['tenant_id'])?.toString(),
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      roomNumber: json['roomNumber'] ?? json['room_number'] ?? 'N/A',
+      startDate: parseDate(json['startDate'] ?? json['start_date']),
+      dueDate: json['dueDate'] != null ? parseDate(json['dueDate']) : (json['due_date'] != null ? parseDate(json['due_date']) : null),
       totalMonths: json['totalMonths'] ?? json['total_months'] ?? 1,
       paidMonths: json['paidMonths'] ?? json['paid_months'] ?? 0,
       securityDeposit: json['securityDeposit'] != null ? (json['securityDeposit'] as num).toDouble() : (json['security_deposit'] != null ? (json['security_deposit'] as num).toDouble() : null),

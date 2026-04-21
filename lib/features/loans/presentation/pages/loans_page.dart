@@ -158,13 +158,23 @@ class _LoansPageState extends State<LoansPage> {
   }
 
   Widget _buildLoanCard(LoanEntity loan) {
+    final now = DateTime.now();
+    final isDueToday = loan.dueDate.year == now.year && 
+                       loan.dueDate.month == now.month && 
+                       loan.dueDate.day == now.day;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(25),
+        border: isDueToday ? Border.all(color: AppTheme.primary, width: 2) : null,
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 8)),
+          BoxShadow(
+            color: isDueToday ? AppTheme.primary.withOpacity(0.1) : Colors.black.withOpacity(0.04), 
+            blurRadius: 15, 
+            offset: const Offset(0, 8)
+          ),
         ],
       ),
       child: InkWell(
@@ -184,10 +194,15 @@ class _LoansPageState extends State<LoansPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        loan.clientName ?? 'Cliente',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.text),
+                      Expanded(
+                        child: Text(
+                          loan.clientName ?? 'Cliente',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.text),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       ),
+                      const SizedBox(width: 10),
                       Row(
                         children: [
                           GestureDetector(
@@ -237,17 +252,30 @@ class _LoansPageState extends State<LoansPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF7ED),
-                      borderRadius: BorderRadius.circular(8),
+                  if (isDueToday)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        '🔥 COBRAR HOY',
+                        style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'EN CURSO',
+                        style: TextStyle(color: Color(0xFFC2410C), fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
                     ),
-                    child: const Text(
-                      'EN CURSO',
-                      style: TextStyle(color: Color(0xFFC2410C), fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -275,11 +303,15 @@ class _LoansPageState extends State<LoansPage> {
               padding: const EdgeInsets.fromLTRB(20, 15, 20, 20),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_month_outlined, size: 16, color: AppTheme.textSecondary),
+                  Icon(Icons.calendar_month_outlined, size: 16, color: isDueToday ? AppTheme.primary : AppTheme.textSecondary),
                   const SizedBox(width: 8),
                   Text(
                     'Vence: ${DateFormat('dd/MM/yyyy').format(loan.dueDate)}',
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                    style: TextStyle(
+                      color: isDueToday ? AppTheme.primary : AppTheme.textSecondary, 
+                      fontSize: 13,
+                      fontWeight: isDueToday ? FontWeight.bold : FontWeight.normal,
+                    ),
                   ),
                 ],
               ),

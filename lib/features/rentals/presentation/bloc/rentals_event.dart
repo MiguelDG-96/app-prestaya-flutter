@@ -16,7 +16,9 @@ class AddRentalRequested extends RentalsEvent {
   List<Object?> get props => [rental];
 }
 
-class GetRentalsRequested extends RentalsEvent {}
+class GetRentalsRequested extends RentalsEvent {
+  const GetRentalsRequested();
+}
 
 class AddRentalPaymentRequested extends RentalsEvent {
   final String rentalId;

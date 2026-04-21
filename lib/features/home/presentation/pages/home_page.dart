@@ -13,6 +13,9 @@ import 'package:app_prestaya_flutter/features/rentals/presentation/pages/add_ren
 import 'package:app_prestaya_flutter/features/rentals/presentation/pages/rental_detail_page.dart';
 import 'package:app_prestaya_flutter/features/notifications/presentation/pages/notifications_page.dart';
 import 'package:app_prestaya_flutter/features/notifications/presentation/bloc/notifications_bloc.dart';
+import 'package:app_prestaya_flutter/features/stats/presentation/pages/stats_page.dart';
+import 'package:app_prestaya_flutter/features/stats/presentation/bloc/stats_bloc.dart';
+import 'package:app_prestaya_flutter/core/services/firebase_service.dart';
 
 class HomePage extends StatefulWidget {
   final VoidCallback? onNavigateToLoans;
@@ -27,12 +30,14 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   int _currentPage = 0;
   String _searchQuery = '';
+  bool _notificationSent = false;
 
   @override
   void initState() {
     super.initState();
     context.read<LoansBloc>().add(LoadLoansRequested());
     context.read<RentalsBloc>().add(GetRentalsRequested());
+    context.read<StatsBloc>().add(LoadStatsRequested());
   }
 
   @override
@@ -52,9 +57,61 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      body: Stack(
-        children: [
-          BlocBuilder<AuthBloc, AuthState>(
+      body: MultiBlocListener(
+        listeners: [
+          BlocListener<LoansBloc, LoansState>(
+            listener: (context, state) {
+              if (state is LoansLoaded && !_notificationSent) {
+                final now = DateTime.now();
+                final dueToday = state.loans.where((loan) => 
+                  loan.dueDate.year == now.year && 
+                  loan.dueDate.month == now.month && 
+                  loan.dueDate.day == now.day
+                ).toList();
+
+                if (dueToday.isNotEmpty) {
+                  _notificationSent = true;
+                  final names = dueToday.map((l) => l.clientName).take(2).join(", ");
+                  final more = dueToday.length > 2 ? " y ${dueToday.length - 2} más" : "";
+                  
+                  FirebaseService.showInstantNotification(
+                    title: "📅 ¡Cobros de Préstamos!",
+                    body: "Hoy vence el pago de: $names$more.",
+                    payload: "CLIENT:${dueToday.first.clientId}",
+                  );
+                }
+              }
+            },
+          ),
+          BlocListener<RentalsBloc, RentalsState>(
+            listener: (context, state) {
+              if (state is RentalsLoaded && !_notificationSent) {
+                final now = DateTime.now();
+                final dueToday = state.rentals.where((rental) => 
+                  rental.dueDate != null &&
+                  rental.dueDate!.year == now.year && 
+                  rental.dueDate!.month == now.month && 
+                  rental.dueDate!.day == now.day
+                ).toList();
+
+                if (dueToday.isNotEmpty) {
+                  _notificationSent = true;
+                  final names = dueToday.map((r) => r.tenant?.name ?? 'Inquilino').take(2).join(", ");
+                  final more = dueToday.length > 2 ? " y ${dueToday.length - 2} más" : "";
+                  
+                  FirebaseService.showInstantNotification(
+                    title: "🏠 ¡Cobros de Alquiler!",
+                    body: "Hoy toca cobrar a: $names$more.",
+                    payload: "RENTAL:${dueToday.first.id}",
+                  );
+                }
+              }
+            },
+          ),
+        ],
+        child: Stack(
+          children: [
+            BlocBuilder<AuthBloc, AuthState>(
             builder: (context, state) {
               final user = (state is Authenticated) ? state.user : null;
               
@@ -69,17 +126,36 @@ class _HomePageState extends State<HomePage> {
                       showSeeAll: true,
                       onSeeAll: () => _navigateToTab(2),
                     ),
-                    _buildSummaryCarousel(),
+                    BlocBuilder<StatsBloc, StatsState>(
+                      builder: (context, state) {
+                        if (state is StatsLoaded) {
+                          return _buildSummaryCarousel(state);
+                        }
+                        return _buildSummaryCarousel(null);
+                      },
+                    ),
                     _buildPageIndicator(),
                     const SizedBox(height: 20),
                     _buildSectionTitle(
-                      'Resumen de tus préstamos',
+                      'Estadísticas de Cobro',
+                    ),
+                    BlocBuilder<StatsBloc, StatsState>(
+                      builder: (context, state) {
+                        if (state is StatsLoaded) {
+                          return _buildLoanStats(state);
+                        }
+                        return _buildLoanStats(null);
+                      },
+                    ),
+                    const SizedBox(height: 25),
+                    _buildSectionTitle(
+                      'Tus Préstamos Recientes',
                       showSeeAll: true,
                       onSeeAll: () => _navigateToTab(2),
                     ),
-                    _buildLoanStats(),
-                    const SizedBox(height: 25),
                     _buildPortfolioStatus(),
+                    const SizedBox(height: 25),
+                    _buildStatsBanner(),
                     const SizedBox(height: 100), // Espacio para el BottomBar
                   ],
                 ),
@@ -89,6 +165,7 @@ class _HomePageState extends State<HomePage> {
           if (_searchQuery.isNotEmpty) _buildSearchOverlay(),
         ],
       ),
+    ),
     );
   }
 
@@ -308,22 +385,25 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildSummaryCarousel() {
+  Widget _buildSummaryCarousel(StatsLoaded? stats) {
+    final overall = stats?.overall;
+    final daily = stats?.daily;
+
     final summaries = [
       _SummaryData(
         title: 'Cartera Total',
         subtitle: 'Por cobrar',
-        amount: 'S/ 0',
-        footer: 'Préstamos vigentes',
+        amount: 'S/ ${overall?['total_portfolio']?.toStringAsFixed(0) ?? '0'}',
+        footer: 'Capital + Interés',
         color: AppTheme.primary,
         icon: Icons.account_balance_wallet_outlined,
-        tags: ['Activo', 'Vigente'],
+        tags: ['Activo', 'Total'],
       ),
       _SummaryData(
         title: 'Cobros Hoy',
         subtitle: 'Planificado',
-        amount: 'S/ 0',
-        footer: 'Hoy',
+        amount: 'S/ ${daily?['today']?.toStringAsFixed(0) ?? '0'}',
+        footer: 'Crecimiento: ${daily?['growth']?.toStringAsFixed(1) ?? '0'}%',
         color: const Color(0xFFFF8C00),
         icon: Icons.calendar_today_outlined,
         tags: ['Prioridad', 'Diario'],
@@ -331,20 +411,20 @@ class _HomePageState extends State<HomePage> {
       _SummaryData(
         title: 'Ganancia Real',
         subtitle: 'Cobrada',
-        amount: 'S/ 0',
-        footer: 'Capital retornado',
+        amount: 'S/ ${overall?['total_collected']?.toStringAsFixed(0) ?? '0'}',
+        footer: 'Efectivo en caja',
         color: const Color(0xFF27AE60),
         icon: Icons.trending_up_outlined,
-        tags: ['Efectivo', 'Caja'],
+        tags: ['Efectivo', 'Real'],
       ),
       _SummaryData(
-        title: 'Cobros Mes',
-        subtitle: 'Proyectado',
-        amount: 'S/ 0',
-        footer: 'Recuperación',
+        title: 'Pendiente',
+        subtitle: 'Por recuperar',
+        amount: 'S/ ${overall?['total_pending']?.toStringAsFixed(0) ?? '0'}',
+        footer: 'Saldo restante',
         color: const Color(0xFFFF2D55),
         icon: Icons.auto_graph_outlined,
-        tags: ['Meta', 'Mensual'],
+        tags: ['Riesgo', 'Meta'],
       ),
     ];
 
@@ -448,14 +528,28 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildLoanStats() {
+  Widget _buildLoanStats(StatsLoaded? stats) {
+    final daily = stats?.daily;
+    final monthly = stats?.monthly;
+    
+    double monthTotal = 0;
+    if (monthly != null && monthly.isNotEmpty) {
+      // Obtener el índice del mes actual (1-12)
+      final int currentMonth = DateTime.now().month;
+      // Buscamos el mes en la lista (algunos APIs devuelven 0-11, otros 1-12)
+      // En nuestro backend es 1-12, pero en la lista de Flutter el índice es 0-11
+      if (currentMonth <= monthly.length) {
+        monthTotal = (monthly[currentMonth - 1]['paid'] ?? 0.0).toDouble();
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 15),
       child: Row(
         children: [
-          _buildStatCard('Cobros Hoy', 'S/ 0', const Color(0xFF27AE60), Icons.calendar_today),
+          _buildStatCard('Hoy', 'S/ ${daily?['today']?.toStringAsFixed(0) ?? '0'}', const Color(0xFF27AE60), Icons.calendar_today),
           const SizedBox(width: 15),
-          _buildStatCard('Cobros Mes', 'S/ 0', AppTheme.primary, Icons.calendar_month),
+          _buildStatCard('Acum. Mes', 'S/ ${monthTotal.toStringAsFixed(0)}', AppTheme.primary, Icons.calendar_month),
         ],
       ),
     );
@@ -491,33 +585,164 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildPortfolioStatus() {
+    return BlocBuilder<LoansBloc, LoansState>(
+      builder: (context, state) {
+        if (state is LoansLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (state is LoansLoaded) {
+          final recentLoans = state.loans.take(3).toList();
+          
+          if (recentLoans.isEmpty) {
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 15),
+              padding: const EdgeInsets.all(30),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(25),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.payments_outlined, size: 50, color: AppTheme.primary.withOpacity(0.2)),
+                  const SizedBox(height: 15),
+                  const Text('No tienes préstamos activos', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                ],
+              ),
+            );
+          }
+
+          return Column(
+            children: recentLoans.map((loan) => _buildLoanCard(loan)).toList(),
+          );
+        }
+
+        return const SizedBox();
+      },
+    );
+  }
+
+  Widget _buildLoanCard(dynamic loan) {
+    String translateFrequency(String? freq) {
+      switch (freq?.toUpperCase()) {
+        case 'DAILY': return 'Diario';
+        case 'WEEKLY': return 'Semanal';
+        case 'BIWEEKLY': return 'Quincenal';
+        case 'MONTHLY': return 'Mensual';
+        default: return freq ?? 'No definida';
+      }
+    }
+
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 15),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const Text('Estado de la Cartera', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 40),
-          Center(
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: const Icon(Icons.person_outline, color: AppTheme.primary, size: 24),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.pie_chart_outline, size: 60, color: AppTheme.primary.withOpacity(0.1)),
-                const SizedBox(height: 15),
-                const Text('No hay préstamos activos aún', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                Text(
+                  loan.clientName ?? 'Cliente',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Frecuencia: ${translateFrequency(loan.frequency)}',
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'S/ ${loan.amount.toStringAsFixed(0)}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primary),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Activo',
+                  style: TextStyle(color: Color(0xFF2E7D32), fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatsBanner() {
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StatsPage())),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 15),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: [
+            BoxShadow(color: const Color(0xFF6366F1).withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(15)),
+              child: const Icon(Icons.analytics_outlined, color: Colors.white, size: 28),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Reportes y Análisis',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Visualiza el crecimiento de tu cartera y el estado detallado de tus cobros.',
+                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 18),
+          ],
+        ),
       ),
     );
   }

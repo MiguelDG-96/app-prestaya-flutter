@@ -1,78 +1,113 @@
+import 'package:app_prestaya_flutter/injection_container.dart' as di;
+import 'package:app_prestaya_flutter/main.dart';
+import 'package:app_prestaya_flutter/features/clients/presentation/pages/client_detail_page.dart';
+import 'package:app_prestaya_flutter/features/clients/domain/repositories/client_repository.dart';
+import 'package:app_prestaya_flutter/features/rentals/presentation/pages/rental_detail_page.dart';
+import 'package:app_prestaya_flutter/features/rentals/domain/repositories/rentals_repository.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:flutter/foundation.dart';
-import 'package:app_prestaya_flutter/injection_container.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
 
 class FirebaseService {
   static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   static Future<void> init() async {
-    // 1. Inicializar Firebase (Requiere google-services.json en android/app)
     try {
       await Firebase.initializeApp();
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       
-      // 2. Solicitar permisos (iOS)
-      NotificationSettings settings = await _firebaseMessaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
+      await _firebaseMessaging.requestPermission(alert: true, badge: true, sound: true);
+
+      const fln.AndroidNotificationChannel channel = fln.AndroidNotificationChannel(
+        'high_importance_channel',
+        'Notificaciones Importantes',
+        description: 'Canal para alertas críticas y pagos.',
+        importance: fln.Importance.max,
+        playSound: true,
       );
 
-      if (kDebugMode) {
-        print('User granted permission: ${settings.authorizationStatus}');
-      }
+      // Usamos dynamic para evitar el error de argumentos posicionales del compilador
+      final dynamic notificationsPlugin = di.sl<fln.FlutterLocalNotificationsPlugin>();
 
-      // 3. Obtener el Token (Este se debe enviar al backend)
-      String? token = await _firebaseMessaging.getToken();
-      if (kDebugMode) {
-        print('FCM Token: $token');
-      }
+      await notificationsPlugin
+          .resolvePlatformSpecificImplementation<fln.AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
 
-      // 4. Configurar notificaciones locales para Android
       const fln.AndroidInitializationSettings initializationSettingsAndroid = fln.AndroidInitializationSettings('@mipmap/ic_launcher');
       const fln.InitializationSettings initializationSettings = fln.InitializationSettings(android: initializationSettingsAndroid);
-      await sl<fln.FlutterLocalNotificationsPlugin>().initialize(
-        settings: initializationSettings,
-        onDidReceiveNotificationResponse: (fln.NotificationResponse details) {
-          // Manejar click en notificación
+      
+      await notificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (fln.NotificationResponse details) async {
+          if (details.payload != null) {
+            final payload = details.payload!;
+            
+            if (payload.startsWith('CLIENT:')) {
+              final clientId = payload.replaceFirst('CLIENT:', '');
+              final repo = di.sl<ClientRepository>();
+              final result = await repo.getClients();
+              result.fold((_) => null, (clients) {
+                try {
+                  final client = clients.firstWhere((c) => c.id == clientId);
+                  navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ClientDetailPage(client: client)));
+                } catch (_) {}
+              });
+            } else if (payload.startsWith('RENTAL:')) {
+              final rentalId = payload.replaceFirst('RENTAL:', '');
+              final repo = di.sl<RentalsRepository>();
+              final result = await repo.getRentals();
+              result.fold((_) => null, (rentals) {
+                try {
+                  final rental = rentals.firstWhere((r) => r.id == rentalId);
+                  navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => RentalDetailPage(rental: rental)));
+                } catch (_) {}
+              });
+            }
+          }
         },
       );
 
-      // 5. Manejar mensajes en primer plano
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        if (kDebugMode) {
-          print('Got a message whilst in the foreground!');
-          print('Message data: ${message.data}');
-        }
-
         if (message.notification != null) {
-          _showLocalNotification(message);
+          showInstantNotification(
+            title: message.notification?.title ?? "Aviso",
+            body: message.notification?.body ?? "",
+          );
         }
       });
       
     } catch (e) {
-      if (kDebugMode) {
-        print('Error inicializando Firebase: $e');
-      }
+      if (kDebugMode) print('Error Firebase: $e');
     }
   }
 
-  static void _showLocalNotification(RemoteMessage message) {
+  static void showInstantNotification({required String title, required String body, String? payload}) async {
     const fln.AndroidNotificationDetails androidPlatformChannelSpecifics = fln.AndroidNotificationDetails(
       'high_importance_channel', 
-      'Notificaciones Importantes',
+      'Avisos de Cobro',
       importance: fln.Importance.max,
       priority: fln.Priority.high,
-      showWhen: true,
+      icon: '@mipmap/ic_launcher',
+      playSound: true,
     );
+    
     const fln.NotificationDetails platformChannelSpecifics = fln.NotificationDetails(android: androidPlatformChannelSpecifics);
     
-    sl<fln.FlutterLocalNotificationsPlugin>().show(
-      id: message.hashCode,
-      title: message.notification?.title ?? '',
-      body: message.notification?.body ?? '',
-      notificationDetails: platformChannelSpecifics,
+    final dynamic notificationsPlugin = di.sl<fln.FlutterLocalNotificationsPlugin>();
+    
+    await notificationsPlugin.show(
+      payload.hashCode, 
+      title,
+      body,
+      platformChannelSpecifics,
+      payload: payload,
     );
   }
 

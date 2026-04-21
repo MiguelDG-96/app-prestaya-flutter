@@ -139,8 +139,7 @@ class ClientsBloc extends Bloc<ClientsEvent, ClientsState> {
       result.fold(
         (failure) => emit(ClientsError(failure.message)),
         (newClient) {
-          _allClients.add(newClient);
-          emit(ClientsLoaded(clients: List.from(_allClients)));
+          add(LoadClients()); // Recargar del servidor para asegurar sincronización
         },
       );
     });
@@ -150,11 +149,7 @@ class ClientsBloc extends Bloc<ClientsEvent, ClientsState> {
       result.fold(
         (failure) => emit(ClientsError(failure.message)),
         (updatedClient) {
-          final index = _allClients.indexWhere((c) => c.id == event.id);
-          if (index != -1) {
-            _allClients[index] = updatedClient;
-            emit(ClientsLoaded(clients: List.from(_allClients)));
-          }
+          add(LoadClients()); // Recargar del servidor
         },
       );
     });
@@ -164,8 +159,7 @@ class ClientsBloc extends Bloc<ClientsEvent, ClientsState> {
       result.fold(
         (failure) => emit(ClientsError(failure.message)),
         (_) {
-          _allClients.removeWhere((c) => c.id == event.id);
-          emit(ClientsLoaded(clients: List.from(_allClients)));
+          add(LoadClients()); // Recargar del servidor
         },
       );
     });

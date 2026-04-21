@@ -64,7 +64,7 @@ class _AddLoanPageState extends State<AddLoanPage> {
             context,
             title: '¡Préstamo Registrado!',
             message: 'El préstamo para ${_selectedClient?.name} se ha guardado correctamente.',
-            onDismiss: () => Navigator.pop(context),
+            onDismiss: () => Navigator.pop(context, true),
           );
         } else if (state is LoansError) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:app_prestaya_flutter/core/theme/app_theme.dart';
 
 import 'package:app_prestaya_flutter/features/loans/presentation/pages/add_loan_page.dart';
+import 'package:app_prestaya_flutter/features/loans/presentation/bloc/loans_bloc.dart';
 import 'package:app_prestaya_flutter/features/rentals/presentation/pages/add_rental_page.dart';
+import 'package:app_prestaya_flutter/features/rentals/presentation/bloc/rentals_bloc.dart';
+import 'package:app_prestaya_flutter/features/rentals/presentation/bloc/rentals_event.dart';
+import 'package:app_prestaya_flutter/features/stats/presentation/bloc/stats_bloc.dart';
 
 class RegisterOptionsSheet extends StatelessWidget {
-  const RegisterOptionsSheet({super.key});
+  final Function(int)? onTabChange;
+  const RegisterOptionsSheet({super.key, this.onTabChange});
 
-  static void show(BuildContext context) {
+  static void show(BuildContext context, {Function(int)? onTabChange}) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => const RegisterOptionsSheet(),
+      builder: (context) => RegisterOptionsSheet(onTabChange: onTabChange),
     );
   }
 
@@ -60,12 +66,17 @@ class RegisterOptionsSheet extends StatelessWidget {
             icon: Icons.payments_outlined,
             iconColor: const Color(0xFF6366F1),
             bgColor: const Color(0xFF6366F1).withOpacity(0.1),
-            onTap: () {
+            onTap: () async {
               Navigator.pop(context);
-              Navigator.push(
+              final result = await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const AddLoanPage()),
               );
+              if (result == true && context.mounted) {
+                context.read<LoansBloc>().add(LoadLoansRequested());
+                context.read<StatsBloc>().add(LoadStatsRequested());
+                if (onTabChange != null) onTabChange!(2);
+              }
             },
           ),
           const SizedBox(height: 16),
@@ -76,12 +87,17 @@ class RegisterOptionsSheet extends StatelessWidget {
             icon: Icons.apartment_outlined,
             iconColor: const Color(0xFF10B981),
             bgColor: const Color(0xFF10B981).withOpacity(0.1),
-            onTap: () {
+            onTap: () async {
               Navigator.pop(context);
-              Navigator.push(
+              final result = await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const AddRentalPage()),
               );
+              if (result == true && context.mounted) {
+                context.read<RentalsBloc>().add(GetRentalsRequested());
+                context.read<StatsBloc>().add(LoadStatsRequested());
+                if (onTabChange != null) onTabChange!(3);
+              }
             },
           ),
           const SizedBox(height: 32),

@@ -124,7 +124,7 @@ class _AddRentalPageState extends State<AddRentalPage> {
               message: widget.rental != null 
                 ? 'Los cambios para ${_nameController.text} se han guardado.'
                 : 'El contrato para ${_nameController.text} se ha guardado correctamente.',
-              onDismiss: () => Navigator.pop(context),
+              onDismiss: () => Navigator.pop(context, true),
             );
           } else if (state is RentalsError) {
             ScaffoldMessenger.of(context).showSnackBar(

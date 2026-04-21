@@ -4,6 +4,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart' as gsign;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:app_prestaya_flutter/core/network/dio_client.dart';
+import 'package:app_prestaya_flutter/features/stats/data/datasources/stats_remote_datasource.dart' as stats_ds;
+import 'package:app_prestaya_flutter/features/stats/data/repositories/stats_repository_impl.dart' as stats_repo;
+import 'package:app_prestaya_flutter/features/stats/presentation/bloc/stats_bloc.dart' as stats_bloc;
+import 'package:app_prestaya_flutter/core/services/export_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Auth
 import 'features/auth/domain/repositories/auth_repository.dart';
@@ -45,6 +50,9 @@ Future<void> init() async {
     sl.registerLazySingleton(() => const FlutterSecureStorage());
   }
   
+  final sharedPreferences = await SharedPreferences.getInstance();
+  sl.registerLazySingleton(() => sharedPreferences);
+  
   if (!sl.isRegistered<Dio>()) {
     sl.registerLazySingleton(() => Dio());
   }
@@ -54,6 +62,11 @@ Future<void> init() async {
       serverClientId: '1014571855006-e7h8pmlebp3aummncmnm67pcgauq1kqq.apps.googleusercontent.com',
     ));
   }
+
+  // Stats
+  sl.registerLazySingleton<stats_ds.StatsRemoteDataSource>(() => stats_ds.StatsRemoteDataSourceImpl(sl()));
+  sl.registerLazySingleton<stats_repo.StatsRepository>(() => stats_repo.StatsRepositoryImpl(sl()));
+  sl.registerFactory(() => stats_bloc.StatsBloc(repository: sl()));
 
   if (!sl.isRegistered<fln.FlutterLocalNotificationsPlugin>()) {
     sl.registerLazySingleton(() => fln.FlutterLocalNotificationsPlugin());
@@ -157,4 +170,7 @@ Future<void> init() async {
   }
 
   //! Core
+  if (!sl.isRegistered<ExportService>()) {
+    sl.registerLazySingleton(() => ExportService(sl()));
+  }
 }

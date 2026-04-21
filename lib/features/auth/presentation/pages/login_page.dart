@@ -6,6 +6,7 @@ import 'package:app_prestaya_flutter/core/widgets/custom_input.dart';
 import 'package:app_prestaya_flutter/injection_container.dart';
 import 'package:app_prestaya_flutter/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:app_prestaya_flutter/features/home/presentation/pages/main_navigation_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart' as gsign;
 
 class LoginPage extends StatefulWidget {
@@ -21,10 +22,45 @@ class _LoginPageState extends State<LoginPage> {
   bool _rememberMe = false;
 
   @override
+  void initState() {
+    super.initState();
+    _loadCredentials();
+  }
+
+  Future<void> _loadCredentials() async {
+    final prefs = sl<SharedPreferences>();
+    final savedEmail = prefs.getString('remembered_email');
+    final savedPassword = prefs.getString('remembered_password');
+    final rememberMe = prefs.getBool('remember_me') ?? false;
+
+    if (rememberMe && mounted) {
+      setState(() {
+        _emailController.text = savedEmail ?? '';
+        _passwordController.text = savedPassword ?? '';
+        _rememberMe = true;
+      });
+    }
+  }
+
+  Future<void> _saveCredentials() async {
+    final prefs = sl<SharedPreferences>();
+    if (_rememberMe) {
+      await prefs.setString('remembered_email', _emailController.text);
+      await prefs.setString('remembered_password', _passwordController.text);
+      await prefs.setBool('remember_me', true);
+    } else {
+      await prefs.remove('remembered_email');
+      await prefs.remove('remembered_password');
+      await prefs.setBool('remember_me', false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is Authenticated) {
+          _saveCredentials(); // Guardar si tuvo éxito
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const MainNavigationPage()),

@@ -154,7 +154,7 @@ class _AddRentalPaymentPageState extends State<AddRentalPaymentPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            widget.rental.tenant?.name ?? 'Marcus',
+            widget.rental.tenant?.name ?? 'Inquilino no identificado',
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.text),
           ),
           const SizedBox(height: 20),
@@ -320,6 +320,13 @@ class _AddRentalPaymentPageState extends State<AddRentalPaymentPage> {
   }
 
   void _onConfirm(BuildContext context) {
+    if (widget.rental.id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error: Este alquiler no tiene un ID válido.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    
     final amountText = _amountController.text.trim();
     final amount = double.parse(amountText);
 
