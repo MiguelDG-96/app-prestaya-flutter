@@ -16,6 +16,7 @@ import 'package:app_prestaya_flutter/features/notifications/presentation/bloc/no
 import 'package:app_prestaya_flutter/features/stats/presentation/pages/stats_page.dart';
 import 'package:app_prestaya_flutter/features/stats/presentation/bloc/stats_bloc.dart';
 import 'package:app_prestaya_flutter/core/services/firebase_service.dart';
+import 'package:app_prestaya_flutter/core/utils/permission_helper.dart';
 
 class HomePage extends StatefulWidget {
   final VoidCallback? onNavigateToLoans;
@@ -31,6 +32,22 @@ class _HomePageState extends State<HomePage> {
   int _currentPage = 0;
   String _searchQuery = '';
   bool _notificationSent = false;
+  int _selectedMonth = DateTime.now().month - 1;
+  final List<Map<String, dynamic>> _months = [
+    {'value': 0, 'label': 'Enero'},
+    {'value': 1, 'label': 'Febrero'},
+    {'value': 2, 'label': 'Marzo'},
+    {'value': 3, 'label': 'Abril'},
+    {'value': 4, 'label': 'Mayo'},
+    {'value': 5, 'label': 'Junio'},
+    {'value': 6, 'label': 'Julio'},
+    {'value': 7, 'label': 'Agosto'},
+    {'value': 8, 'label': 'Septiembre'},
+    {'value': 9, 'label': 'Octubre'},
+    {'value': 10, 'label': 'Noviembre'},
+    {'value': 11, 'label': 'Diciembre'},
+    {'value': -1, 'label': 'Todos (Global)'},
+  ];
 
   @override
   void initState() {
@@ -61,6 +78,9 @@ class _HomePageState extends State<HomePage> {
         listeners: [
           BlocListener<LoansBloc, LoansState>(
             listener: (context, state) {
+              if (state is LoanAddedSuccess || state is LoanDeletedSuccess || state is PaymentSuccess || state is LoanUpdatedSuccess) {
+                context.read<StatsBloc>().add(LoadStatsRequested());
+              }
               if (state is LoansLoaded && !_notificationSent) {
                 final now = DateTime.now();
                 final dueToday = state.loans.where((loan) => 
@@ -85,6 +105,9 @@ class _HomePageState extends State<HomePage> {
           ),
           BlocListener<RentalsBloc, RentalsState>(
             listener: (context, state) {
+              if (state is RentalAddedSuccess || state is RentalPaymentSuccess) {
+                context.read<StatsBloc>().add(LoadStatsRequested());
+              }
               if (state is RentalsLoaded && !_notificationSent) {
                 final now = DateTime.now();
                 final dueToday = state.rentals.where((rental) => 
@@ -120,42 +143,48 @@ class _HomePageState extends State<HomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildHeader(context, user),
-                    const SizedBox(height: 25),
-                    _buildSectionTitle(
-                      'Resumen General',
-                      showSeeAll: true,
-                      onSeeAll: () => _navigateToTab(2),
-                    ),
-                    BlocBuilder<StatsBloc, StatsState>(
-                      builder: (context, state) {
-                        if (state is StatsLoaded) {
-                          return _buildSummaryCarousel(state);
-                        }
-                        return _buildSummaryCarousel(null);
-                      },
-                    ),
-                    _buildPageIndicator(),
-                    const SizedBox(height: 20),
-                    _buildSectionTitle(
-                      'Estadísticas de Cobro',
-                    ),
-                    BlocBuilder<StatsBloc, StatsState>(
-                      builder: (context, state) {
-                        if (state is StatsLoaded) {
-                          return _buildLoanStats(state);
-                        }
-                        return _buildLoanStats(null);
-                      },
-                    ),
-                    const SizedBox(height: 25),
-                    _buildSectionTitle(
-                      'Tus Préstamos Recientes',
-                      showSeeAll: true,
-                      onSeeAll: () => _navigateToTab(2),
-                    ),
-                    _buildPortfolioStatus(),
-                    const SizedBox(height: 25),
-                    _buildStatsBanner(),
+                    if (PermissionHelper.hasPermission(context, AppPermissions.statsView)) ...[
+                      _buildSectionTitle(
+                        'Resumen General',
+                        showSeeAll: true,
+                        onSeeAll: () => _navigateToTab(2),
+                      ),
+                      BlocBuilder<StatsBloc, StatsState>(
+                        builder: (context, state) {
+                          if (state is StatsLoaded) {
+                            return _buildSummaryCarousel(state);
+                          }
+                          return _buildSummaryCarousel(null);
+                        },
+                      ),
+                      _buildPageIndicator(),
+                      const SizedBox(height: 20),
+                    ],
+                    if (PermissionHelper.hasPermission(context, AppPermissions.statsView)) ...[
+                      _buildSectionTitle(
+                        'Estadísticas de Cobro',
+                      ),
+                      BlocBuilder<StatsBloc, StatsState>(
+                        builder: (context, state) {
+                          if (state is StatsLoaded) {
+                            return _buildLoanStats(state);
+                          }
+                          return _buildLoanStats(null);
+                        },
+                      ),
+                      const SizedBox(height: 25),
+                    ],
+                    if (PermissionHelper.hasPermission(context, AppPermissions.prestamosView)) ...[
+                      _buildSectionTitle(
+                        'Tus Préstamos Recientes',
+                        showSeeAll: true,
+                        onSeeAll: () => _navigateToTab(2),
+                      ),
+                      _buildPortfolioStatus(),
+                      const SizedBox(height: 25),
+                    ],
+                    if (PermissionHelper.hasPermission(context, AppPermissions.statsView))
+                      _buildStatsBanner(),
                     const SizedBox(height: 100), // Espacio para el BottomBar
                   ],
                 ),
@@ -269,14 +298,33 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                height: 45,
-                width: 45,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+              PopupMenuButton<int>(
+                onSelected: (value) {
+                  setState(() {
+                    _selectedMonth = value;
+                  });
+                },
+                itemBuilder: (context) => _months.map((m) => PopupMenuItem<int>(
+                  value: m['value'] as int,
+                  child: Text(
+                    m['label'] as String, 
+                    style: TextStyle(
+                      color: _selectedMonth == m['value'] ? AppTheme.primary : AppTheme.text, 
+                      fontWeight: _selectedMonth == m['value'] ? FontWeight.bold : FontWeight.normal
+                    ),
+                  ),
+                )).toList(),
+                offset: const Offset(0, 50),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                child: Container(
+                  height: 45,
+                  width: 45,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.tune_outlined, color: Colors.white, size: 20),
                 ),
-                child: const Icon(Icons.tune_outlined, color: Colors.white, size: 20),
               ),
             ],
           ),
@@ -387,122 +435,284 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildSummaryCarousel(StatsLoaded? stats) {
     final overall = stats?.overall;
-    final daily = stats?.daily;
+    final monthly = stats?.monthly;
+    
+    final int currentRealMonthIdx = DateTime.now().month - 1;
+    final realMonthStats = (monthly != null && currentRealMonthIdx >= 0 && currentRealMonthIdx < monthly.length) 
+        ? monthly[currentRealMonthIdx] 
+        : null;
+    final mensualCobrado = (realMonthStats?['paid'] ?? 0.0) as num;
 
-    final summaries = [
-      _SummaryData(
-        title: 'Cartera Total',
-        subtitle: 'Por cobrar',
-        amount: 'S/ ${overall?['total_portfolio']?.toStringAsFixed(0) ?? '0'}',
-        footer: 'Capital + Interés',
-        color: AppTheme.primary,
-        icon: Icons.account_balance_wallet_outlined,
-        tags: ['Activo', 'Total'],
-      ),
-      _SummaryData(
-        title: 'Cobros Hoy',
-        subtitle: 'Planificado',
-        amount: 'S/ ${daily?['today']?.toStringAsFixed(0) ?? '0'}',
-        footer: 'Crecimiento: ${daily?['growth']?.toStringAsFixed(1) ?? '0'}%',
-        color: const Color(0xFFFF8C00),
-        icon: Icons.calendar_today_outlined,
-        tags: ['Prioridad', 'Diario'],
-      ),
-      _SummaryData(
-        title: 'Ganancia Real',
-        subtitle: 'Cobrada',
-        amount: 'S/ ${overall?['total_collected']?.toStringAsFixed(0) ?? '0'}',
-        footer: 'Efectivo en caja',
-        color: const Color(0xFF27AE60),
-        icon: Icons.trending_up_outlined,
-        tags: ['Efectivo', 'Real'],
-      ),
-      _SummaryData(
-        title: 'Pendiente',
-        subtitle: 'Por recuperar',
-        amount: 'S/ ${overall?['total_pending']?.toStringAsFixed(0) ?? '0'}',
-        footer: 'Saldo restante',
-        color: const Color(0xFFFF2D55),
-        icon: Icons.auto_graph_outlined,
-        tags: ['Riesgo', 'Meta'],
-      ),
+    num capitalOtorgado = 0;
+    num interesRecaudado = 0;
+    
+    if (_selectedMonth == -1) {
+      capitalOtorgado = (overall?['capital_otorgado'] ?? 0.0) as num;
+      interesRecaudado = (overall?['interes_recaudado'] ?? 0.0) as num;
+    } else {
+      final selectedMonthStats = (monthly != null && _selectedMonth >= 0 && _selectedMonth < monthly.length) 
+          ? monthly[_selectedMonth] 
+          : null;
+      capitalOtorgado = (selectedMonthStats?['capital_otorgado'] ?? 0.0) as num;
+      interesRecaudado = (selectedMonthStats?['interes_recaudado'] ?? 0.0) as num;
+    }
+    
+    final totalMes = capitalOtorgado + interesRecaudado;
+    
+    final gananciaCobrada = (overall?['total_collected'] ?? 0.0) as num;
+    final porRecuperar = (overall?['total_pending'] ?? 0.0) as num;
+
+    final pages = [
+      _buildPurpleCard(totalMes, capitalOtorgado, interesRecaudado),
+      _buildOrangeCard(mensualCobrado),
+      _buildGreenCard(gananciaCobrada),
+      _buildRedCard(porRecuperar),
     ];
 
     return SizedBox(
-      height: 210,
+      height: 280, // Aumentado para evitar el desbordamiento RenderFlex
       child: PageView.builder(
         controller: _pageController,
         onPageChanged: (index) => setState(() => _currentPage = index),
-        itemCount: summaries.length,
+        itemCount: pages.length,
         itemBuilder: (context, index) {
-          final data = summaries[index];
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: data.color,
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(color: data.color.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5)),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+            child: pages[index],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPurpleCard(num totalMes, num capitalOtorgado, num interesRecaudado) {
+    String monthLabel = 'GLOBAL';
+    if (_selectedMonth >= 0) {
+      final monthMap = _months.firstWhere((m) => m['value'] == _selectedMonth, orElse: () => {'label': 'MES'});
+      monthLabel = (monthMap['label'] as String).toUpperCase();
+    }
+    String mainTitle = _selectedMonth == -1 ? 'CARTERA TOTAL' : 'TOTAL MES';
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7B61FF),
+        borderRadius: BorderRadius.circular(35),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF7B61FF).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Icon(Icons.account_balance_wallet, size: 120, color: Colors.white.withOpacity(0.1)),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(15)),
+                    child: const Icon(Icons.account_balance_wallet_outlined, color: Colors.white, size: 24),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
+                        child: Text(monthLabel, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
+                        child: const Text('RESUMEN', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 15),
+              Text(mainTitle, style: const TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              Text('S/ ${totalMes.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+                child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                      child: Icon(data.icon, color: data.color, size: 24),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('CAP. OTORGADO', style: TextStyle(color: Colors.white60, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                          Text('S/ ${capitalOtorgado.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
+                    Container(width: 1, height: 30, color: Colors.white.withOpacity(0.2)),
                     const SizedBox(width: 15),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(data.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                          Text(data.subtitle, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
+                          const Text('INT. RECAUDADO', style: TextStyle(color: Colors.white60, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                          Text('S/ ${interesRecaudado.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.bookmark_border, color: Colors.white, size: 20),
-                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: data.tags.map((tag) => Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(tag, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                  )).toList(),
-                ),
-                const SizedBox(height: 12),
-                const Spacer(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(data.amount, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-                    Text(data.footer, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrangeCard(num mensualCobrado) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF97316),
+        borderRadius: BorderRadius.circular(35),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFFF97316).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Icon(Icons.calendar_month, size: 120, color: Colors.white.withOpacity(0.1)),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(15)),
+                    child: const Icon(Icons.calendar_today_outlined, color: Colors.white, size: 24),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
+                    child: const Text('MES ACTUAL', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              const Text('MENSUAL COBRADO', style: TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              Text('S/ ${mensualCobrado.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1)),
+              const SizedBox(height: 5),
+              const Text('Acumulado del mes', style: TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGreenCard(num gananciaCobrada) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF059669),
+        borderRadius: BorderRadius.circular(35),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF059669).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Icon(Icons.trending_up, size: 120, color: Colors.white.withOpacity(0.1)),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(15)),
+                    child: const Icon(Icons.trending_up_outlined, color: Colors.white, size: 24),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
+                    child: const Text('REAL', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              const Text('GANANCIA COBRADA', style: TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              Text('S/ ${gananciaCobrada.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1)),
+              const SizedBox(height: 5),
+              const Text('Efectivo total en caja', style: TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRedCard(num porRecuperar) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF43F5E),
+        borderRadius: BorderRadius.circular(35),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFFF43F5E).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Icon(Icons.monetization_on, size: 120, color: Colors.white.withOpacity(0.1)),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(15)),
+                    child: const Icon(Icons.attach_money_outlined, color: Colors.white, size: 24),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
+                    child: const Text('RIESGO', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              const Text('POR RECUPERAR', style: TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              Text('S/ ${porRecuperar.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1)),
+              const SizedBox(height: 5),
+              const Text('Meta de recuperación mensual', style: TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -664,11 +874,14 @@ class _HomePageState extends State<HomePage> {
                   loan.clientName ?? 'Cliente',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Frecuencia: ${translateFrequency(loan.frequency)}',
                   style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ],
             ),

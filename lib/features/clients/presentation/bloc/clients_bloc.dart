@@ -4,6 +4,7 @@ import '../../domain/entities/client_entity.dart';
 import '../../domain/usecases/get_clients_usecase.dart';
 import '../../domain/usecases/add_client_usecase.dart';
 import '../../domain/usecases/client_actions_usecases.dart';
+import '../../domain/repositories/client_repository.dart';
 
 // Eventos
 abstract class ClientsEvent extends Equatable {
@@ -44,6 +45,20 @@ class SearchClients extends ClientsEvent {
 
 class SortClientsAlphabetically extends ClientsEvent {}
 
+class CheckDniEvent extends ClientsEvent {
+  final String dni;
+  CheckDniEvent(this.dni);
+  @override
+  List<Object?> get props => [dni];
+}
+
+class CheckEmailEvent extends ClientsEvent {
+  final String email;
+  CheckEmailEvent(this.email);
+  @override
+  List<Object?> get props => [email];
+}
+
 // Estados
 abstract class ClientsState extends Equatable {
   @override
@@ -79,6 +94,7 @@ class ClientsBloc extends Bloc<ClientsEvent, ClientsState> {
   final AddClientUseCase addClientUseCase;
   final UpdateClientUseCase updateClientUseCase;
   final DeleteClientUseCase deleteClientUseCase;
+  final ClientRepository repository;
 
   List<ClientEntity> _allClients = [];
 
@@ -87,6 +103,7 @@ class ClientsBloc extends Bloc<ClientsEvent, ClientsState> {
     required this.addClientUseCase,
     required this.updateClientUseCase,
     required this.deleteClientUseCase,
+    required this.repository,
   }) : super(ClientsInitial()) {
     
     on<LoadClients>((event, emit) async {
@@ -162,6 +179,13 @@ class ClientsBloc extends Bloc<ClientsEvent, ClientsState> {
           add(LoadClients()); // Recargar del servidor
         },
       );
+    });
+
+    on<CheckDniEvent>((event, emit) async {
+      // Este evento se puede usar si se quiere manejar via estado global,
+      // pero usualmente para validacion en tiempo real se prefiere llamar al repo directamente 
+      // o usar un Bloc diferente para el formulario.
+      // Por ahora solo lo dejamos definido por si se necesita.
     });
   }
 }

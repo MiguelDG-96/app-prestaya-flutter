@@ -22,6 +22,7 @@ class LoansRepositoryImpl implements LoansRepository {
         interest: loan.interest,
         installments: loan.installments,
         frequency: loan.frequency,
+        startDate: loan.startDate,
         dueDate: loan.dueDate,
       );
 
@@ -55,6 +56,7 @@ class LoansRepositoryImpl implements LoansRepository {
         loanId: payment.loanId,
         amount: payment.amount,
         notes: payment.notes,
+        paymentDate: payment.paymentDate,
       );
 
       await dioClient.post('/payments', data: model.toJson());
@@ -69,8 +71,10 @@ class LoansRepositoryImpl implements LoansRepository {
   @override
   Future<Either<Failure, LoanEntity>> updateLoan(String id, Map<String, dynamic> data) async {
     try {
-      final response = await dioClient.put('/api/loans/$id', data: data);
+      final response = await dioClient.put('/loans/$id', data: data);
       return Right(LoanModel.fromJson(response.data));
+    } on DioException catch (e) {
+      return Left(ServerFailure(e.response?.data?.toString() ?? e.toString()));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }
@@ -79,8 +83,10 @@ class LoansRepositoryImpl implements LoansRepository {
   @override
   Future<Either<Failure, Unit>> deleteLoan(String id) async {
     try {
-      await dioClient.delete('/api/loans/$id');
+      await dioClient.delete('/loans/$id');
       return const Right(unit);
+    } on DioException catch (e) {
+      return Left(ServerFailure(e.response?.data?.toString() ?? e.toString()));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }

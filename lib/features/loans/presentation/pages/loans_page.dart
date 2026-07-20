@@ -19,6 +19,7 @@ class _LoansPageState extends State<LoansPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isDescending = true;
   String _searchQuery = '';
+  int? _selectedDay; // 1: Lunes, ..., 7: Domingo
 
   @override
   void initState() {
@@ -52,7 +53,16 @@ class _LoansPageState extends State<LoansPage> {
                 } else if (state is LoansLoaded) {
                   final filteredLoans = state.loans.where((loan) {
                     final name = loan.clientName?.toLowerCase() ?? '';
-                    return name.contains(_searchQuery);
+                    final matchesSearch = name.contains(_searchQuery);
+                    
+                    if (!matchesSearch) return false;
+
+                    if (_selectedDay != null) {
+                      // DateTime.weekday: 1 (Monday) to 7 (Sunday)
+                      return loan.dueDate.weekday == _selectedDay;
+                    }
+
+                    return true;
                   }).toList();
 
                   // Ordenar por fecha de vencimiento o registro
@@ -131,6 +141,27 @@ class _LoansPageState extends State<LoansPage> {
               ),
               const SizedBox(width: 12),
               GestureDetector(
+                onTap: () => context.read<LoansBloc>().add(LoadLoansRequested()),
+                child: BlocBuilder<LoansBloc, LoansState>(
+                  builder: (context, state) {
+                    return Container(
+                      height: 45,
+                      width: 45,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: state is LoansLoading
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.refresh, color: Colors.white, size: 20),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
                 onTap: () {
                   setState(() {
                     _isDescending = !_isDescending;
@@ -150,10 +181,80 @@ class _LoansPageState extends State<LoansPage> {
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () {
+                  _showDayFilter(context);
+                },
+                child: Container(
+                  height: 45,
+                  width: 45,
+                  decoration: BoxDecoration(
+                    color: _selectedDay != null ? Colors.white : Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.filter_list, 
+                    color: _selectedDay != null ? AppTheme.primary : Colors.white, 
+                    size: 20
+                  ),
+                ),
+              ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  void _showDayFilter(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final days = [
+          {'name': 'Todos los días', 'value': null},
+          {'name': 'Lunes', 'value': 1},
+          {'name': 'Martes', 'value': 2},
+          {'name': 'Miércoles', 'value': 3},
+          {'name': 'Jueves', 'value': 4},
+          {'name': 'Viernes', 'value': 5},
+          {'name': 'Sábado', 'value': 6},
+          {'name': 'Domingo', 'value': 7},
+        ];
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            children: [
+              const Center(
+                child: Text('Filtrar por día de cobro', 
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+                ),
+              ),
+              const SizedBox(height: 15),
+              ...days.map((day) => ListTile(
+                title: Text(day['name'] as String, style: TextStyle(
+                  fontWeight: _selectedDay == day['value'] ? FontWeight.bold : FontWeight.normal,
+                  color: _selectedDay == day['value'] ? AppTheme.primary : AppTheme.text,
+                )),
+                trailing: _selectedDay == day['value'] ? const Icon(Icons.check, color: AppTheme.primary) : null,
+                onTap: () {
+                  setState(() {
+                    _selectedDay = day['value'] as int?;
+                  });
+                  Navigator.pop(context);
+                },
+              )).toList(),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -214,10 +315,29 @@ class _LoansPageState extends State<LoansPage> {
                           ),
                           const SizedBox(width: 8),
                           GestureDetector(
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => RegisterPaymentPage(loan: loan)),
-                            ),
+                            onTap: () {
+                              final isFullyPaid = (loan.paidAmount ?? 0) >= (loan.totalToPay ?? 0) - 0.01;
+                              if (isFullyPaid) {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Préstamo Completado'),
+                                    content: const Text('Este cliente ya no tiene deuda pendiente.'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx),
+                                        child: const Text('Aceptar', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                return;
+                              }
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => RegisterPaymentPage(loan: loan)),
+                              );
+                            },
                             child: _buildActionIcon(Icons.payments_outlined, const Color(0xFF10B981).withOpacity(0.1), const Color(0xFF10B981)),
                           ),
                           const SizedBox(width: 8),
@@ -245,37 +365,71 @@ class _LoansPageState extends State<LoansPage> {
                     children: [
                       const Icon(Icons.layers_outlined, size: 16, color: AppTheme.textSecondary),
                       const SizedBox(width: 4),
-                      Text(
-                        'Cuota: ${loan.currentInstallment ?? 0} / ${loan.installments}',
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                      Builder(
+                        builder: (context) {
+                          int effectivePaid = loan.currentInstallment ?? 0;
+                          for (int i = effectivePaid + 1; i <= loan.installments; i++) {
+                            final hasForced = loan.payments.any((p) => 
+                              (p.notes ?? '').toLowerCase().contains('cuota $i') && 
+                              (p.notes ?? '').toLowerCase().contains('completada')
+                            );
+                            if (hasForced) {
+                              effectivePaid = i;
+                            } else {
+                              break;
+                            }
+                          }
+                          return Text(
+                            'Cuota: $effectivePaid / ${loan.installments}',
+                            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                          );
+                        },
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (isDueToday)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        '🔥 COBRAR HOY',
-                        style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF7ED),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'EN CURSO',
-                        style: TextStyle(color: Color(0xFFC2410C), fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final isFullyPaid = (loan.paidAmount ?? 0) >= (loan.totalToPay ?? 0) - 0.01;
+                      if (isFullyPaid) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD1FAE5),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'FINALIZADO',
+                            style: TextStyle(color: Color(0xFF065F46), fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      } else if (isDueToday) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            '🔥 COBRAR HOY',
+                            style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      } else {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF7ED),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'EN CURSO',
+                            style: TextStyle(color: Color(0xFFC2410C), fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      }
+                    },
+                  ),
                 ],
               ),
             ),

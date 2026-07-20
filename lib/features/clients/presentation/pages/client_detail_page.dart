@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:app_prestaya_flutter/core/theme/app_theme.dart';
 import 'package:app_prestaya_flutter/core/widgets/custom_input.dart';
 import 'package:app_prestaya_flutter/core/widgets/custom_button.dart';
 import 'package:app_prestaya_flutter/core/widgets/success_dialog.dart';
 import '../../domain/entities/client_entity.dart';
+import '../../domain/repositories/client_repository.dart';
 import '../bloc/clients_bloc.dart';
+import 'package:app_prestaya_flutter/core/services/apis_peru_service.dart';
+import 'package:app_prestaya_flutter/injection_container.dart';
+import 'package:app_prestaya_flutter/core/utils/permission_helper.dart';
 
 class ClientDetailPage extends StatefulWidget {
   final ClientEntity client;
@@ -51,9 +56,13 @@ class _ClientDetailPageState extends State<ClientDetailPage> {
                   
                   const SizedBox(height: 40),
                   // Botón Editar Información
-                  CustomButton(
-                    title: 'Editar Información',
-                    onPress: () => _showEditClientForm(context),
+                  PermissionHelper.guarded(
+                    context: context,
+                    permission: AppPermissions.clientesUpdate,
+                    child: CustomButton(
+                      title: 'Editar Información',
+                      onPress: () => _showEditClientForm(context),
+                    ),
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -91,9 +100,13 @@ class _ClientDetailPageState extends State<ClientDetailPage> {
                   'Perfil del Cliente',
                   style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                IconButton(
-                  onPressed: () => _confirmDelete(context),
-                  icon: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
+                PermissionHelper.guarded(
+                  context: context,
+                  permission: AppPermissions.clientesDelete,
+                  child: IconButton(
+                    onPressed: () => _confirmDelete(context),
+                    icon: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
+                  ),
                 ),
               ],
             ),
@@ -239,66 +252,252 @@ class _ClientDetailPageState extends State<ClientDetailPage> {
     final emailController = TextEditingController(text: currentClient.email);
     final addressController = TextEditingController(text: currentClient.address);
 
+    final dniFocus = FocusNode();
+    final emailFocus = FocusNode();
+
+    String? nameError;
+    String? dniError;
+    String? phoneError;
+    String? emailError;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (modalContext) => Container(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(modalContext).viewInsets.bottom),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(25),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Editar Cliente', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 25),
-              CustomInput(label: 'Nombre *', placeholder: 'Nombre', controller: nameController),
-              Row(
+      builder: (modalContext) => StatefulBuilder(
+        builder: (stfContext, setModalState) {
+          bool isSearchingDni = false;
+
+          Future<void> searchDni() async {
+            if (dniController.text.length != 8) {
+              setModalState(() => dniError = 'DNI debe tener 8 dígitos');
+              return;
+            }
+
+            setModalState(() {
+              isSearchingDni = true;
+              dniError = null;
+            });
+
+            try {
+              // 1. Verificar en nuestra BD (si cambió el DNI)
+              if (dniController.text != currentClient.dni) {
+                final checkResult = await sl<ClientRepository>().checkDni(dniController.text);
+                bool isTaken = false;
+                checkResult.fold((_) => null, (val) => isTaken = val);
+
+                if (isTaken) {
+                  setModalState(() {
+                    dniError = 'Este DNI ya está registrado';
+                    isSearchingDni = false;
+                  });
+                  return;
+                }
+              }
+
+              // 2. Consultar ApisPeru
+              final dniData = await sl<ApisPeruService>().getDniData(dniController.text);
+              if (dniData != null) {
+                final nombres = dniData['nombres'] ?? '';
+                final pApellido = dniData['apellidoPaterno'] ?? '';
+                final mApellido = dniData['apellidoMaterno'] ?? '';
+                final fullName = '$nombres $pApellido $mApellido'.trim().replaceAll(RegExp(r'\s+'), ' ');
+                
+                setModalState(() {
+                  nameController.text = fullName;
+                  isSearchingDni = false;
+                });
+              } else {
+                setModalState(() => isSearchingDni = false);
+                if (stfContext.mounted) {
+                  ScaffoldMessenger.of(stfContext).showSnackBar(
+                    const SnackBar(content: Text('No se encontró información para este DNI')),
+                  );
+                }
+              }
+            } catch (e) {
+              setModalState(() => isSearchingDni = false);
+            }
+          }
+
+          dniFocus.addListener(() async {
+            if (!dniFocus.hasFocus && dniController.text.length == 8 && dniController.text != currentClient.dni) {
+              final result = await sl<ClientRepository>().checkDni(dniController.text);
+              result.fold((_) => null, (isTaken) async {
+                if (isTaken) {
+                  setModalState(() => dniError = 'Este DNI ya está registrado');
+                } else {
+                  setModalState(() => dniError = null);
+                  
+                  // Auto-completar si el nombre está vacío o es el anterior y queremos actualizarlo
+                  final dniData = await sl<ApisPeruService>().getDniData(dniController.text);
+                  if (dniData != null) {
+                    setModalState(() {
+                      nameController.text = dniData['nombre_completo'] ?? '';
+                    });
+                  }
+                }
+              });
+            }
+          });
+
+          emailFocus.addListener(() async {
+            final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+            if (!emailFocus.hasFocus && emailRegex.hasMatch(emailController.text) && emailController.text != currentClient.email) {
+              final result = await sl<ClientRepository>().checkEmail(emailController.text);
+              result.fold((_) => null, (isTaken) {
+                if (isTaken) {
+                  setModalState(() => emailError = 'Este correo ya está registrado');
+                } else if (emailError == 'Este correo ya está registrado') {
+                  setModalState(() => emailError = null);
+                }
+              });
+            }
+          });
+
+          return Container(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(modalContext).viewInsets.bottom),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(25),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: CustomInput(label: 'DNI', placeholder: 'DNI', controller: dniController, keyboardType: TextInputType.number)),
-                  const SizedBox(width: 15),
-                  Expanded(child: CustomInput(label: 'Teléfono', placeholder: 'Celular', controller: phoneController, keyboardType: TextInputType.phone)),
+                  const Text('Editar Cliente', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 25),
+                  CustomInput(
+                    label: 'Nombre *', 
+                    placeholder: 'Nombre', 
+                    controller: nameController,
+                    errorText: nameError,
+                  ),
+                  CustomInput(
+                    label: 'DNI *', 
+                    placeholder: '8 dígitos', 
+                    controller: dniController, 
+                    keyboardType: TextInputType.number,
+                    errorText: dniError,
+                    focusNode: dniFocus,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(8),
+                    ],
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.all(6.0),
+                      child: SizedBox(
+                        width: 50,
+                        child: ElevatedButton(
+                          onPressed: isSearchingDni ? null : searchDni,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: EdgeInsets.zero,
+                            elevation: 0,
+                          ),
+                          child: isSearchingDni 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.search, size: 20),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  CustomInput(
+                    label: 'Teléfono', 
+                    placeholder: '9 dígitos', 
+                    controller: phoneController, 
+                    keyboardType: TextInputType.phone,
+                    errorText: phoneError,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(9),
+                    ],
+                  ),
+                  CustomInput(
+                    label: 'Correo', 
+                    placeholder: 'usuario@correo.com', 
+                    controller: emailController, 
+                    keyboardType: TextInputType.emailAddress,
+                    errorText: emailError,
+                    focusNode: emailFocus,
+                  ),
+                  CustomInput(label: 'Dirección', placeholder: 'Dirección', controller: addressController),
+                  const SizedBox(height: 25),
+                  CustomButton(
+                    title: 'Guardar Cambios',
+                    onPress: () async {
+                      final name = nameController.text.trim();
+                      final dni = dniController.text.trim();
+                      final phone = phoneController.text.trim();
+                      final email = emailController.text.trim();
+
+                      final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+                      final dniRegex = RegExp(r'^\d{8}$');
+                      final phoneRegex = RegExp(r'^\d{9}$');
+
+                      setModalState(() {
+                        nameError = name.isEmpty ? 'El nombre es requerido' : null;
+                        dniError = !dniRegex.hasMatch(dni) ? 'Debe tener 8 números' : null;
+                        phoneError = !phoneRegex.hasMatch(phone) ? 'Debe tener 9 números' : null;
+                        emailError = !emailRegex.hasMatch(email) ? 'Correo inválido' : null;
+                      });
+
+                      if (nameError == null && dniError == null && phoneError == null && emailError == null) {
+                        // Verificación final si cambiaron los datos
+                        bool isDniTaken = false;
+                        bool isEmailTaken = false;
+
+                        if (dni != currentClient.dni) {
+                          final check = await sl<ClientRepository>().checkDni(dni);
+                          check.fold((_) => null, (val) => isDniTaken = val);
+                        }
+                        if (email != currentClient.email) {
+                          final check = await sl<ClientRepository>().checkEmail(email);
+                          check.fold((_) => null, (val) => isEmailTaken = val);
+                        }
+
+                        if (isDniTaken || isEmailTaken) {
+                          setModalState(() {
+                            if (isDniTaken) dniError = 'Este DNI ya está registrado';
+                            if (isEmailTaken) emailError = 'Este correo ya está registrado';
+                          });
+                          return;
+                        }
+
+                        final updatedData = {
+                          'name': name,
+                          'dni': dni,
+                          'phone': phone,
+                          'email': email,
+                          'address': addressController.text,
+                        };
+                        context.read<ClientsBloc>().add(UpdateClient(currentClient.id, updatedData));
+                        setState(() {
+                          currentClient = ClientEntity(
+                            id: currentClient.id,
+                            name: name,
+                            dni: dni,
+                            phone: phone,
+                            email: email,
+                            address: addressController.text,
+                          );
+                        });
+                        Navigator.pop(modalContext);
+                        SuccessDialog.show(context, title: '¡Actualizado!', message: 'Los datos de $name se actualizaron correctamente.');
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
                 ],
               ),
-              CustomInput(label: 'Correo', placeholder: 'usuario@correo.com', controller: emailController, keyboardType: TextInputType.emailAddress),
-              CustomInput(label: 'Dirección', placeholder: 'Dirección', controller: addressController),
-              const SizedBox(height: 25),
-              CustomButton(
-                title: 'Guardar Cambios',
-                onPress: () {
-                  if (nameController.text.isNotEmpty) {
-                    final updatedData = {
-                      'name': nameController.text,
-                      'dni': dniController.text,
-                      'phone': phoneController.text,
-                      'email': emailController.text,
-                      'address': addressController.text,
-                    };
-                    context.read<ClientsBloc>().add(UpdateClient(currentClient.id, updatedData));
-                    setState(() {
-                      currentClient = ClientEntity(
-                        id: currentClient.id,
-                        name: nameController.text,
-                        dni: dniController.text,
-                        phone: phoneController.text,
-                        email: emailController.text,
-                        address: addressController.text,
-                      );
-                    });
-                    Navigator.pop(modalContext);
-                    SuccessDialog.show(context, title: '¡Actualizado!', message: 'Los datos de ${nameController.text} se actualizaron correctamente.');
-                  }
-                },
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -6,6 +6,8 @@ abstract class ClientRemoteDataSource {
   Future<ClientModel> addClient(Map<String, dynamic> clientData);
   Future<ClientModel> updateClient(String id, Map<String, dynamic> clientData);
   Future<void> deleteClient(String id);
+  Future<bool> checkDni(String dni);
+  Future<bool> checkEmail(String email);
 }
 
 class ClientRemoteDataSourceImpl implements ClientRemoteDataSource {
@@ -35,5 +37,17 @@ class ClientRemoteDataSourceImpl implements ClientRemoteDataSource {
   @override
   Future<void> deleteClient(String id) async {
     await client.delete('/clients/$id');
+  }
+
+  @override
+  Future<bool> checkDni(String dni) async {
+    final response = await client.get('/clients/check-dni', queryParameters: {'dni': dni});
+    return response.data as bool;
+  }
+
+  @override
+  Future<bool> checkEmail(String email) async {
+    final response = await client.get('/clients/check-email', queryParameters: {'email': email});
+    return response.data as bool;
   }
 }

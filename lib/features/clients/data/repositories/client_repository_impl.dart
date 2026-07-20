@@ -48,4 +48,24 @@ class ClientRepositoryImpl implements ClientRepository {
       return Left(ServerFailure('Error al eliminar cliente: ${e.toString()}'));
     }
   }
+
+  @override
+  Future<Either<Failure, bool>> checkDni(String dni) async {
+    try {
+      final exists = await remoteDataSource.checkDni(dni);
+      return Right(exists);
+    } catch (e) {
+      return Left(ServerFailure('Error al verificar DNI'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, bool>> checkEmail(String email) async {
+    try {
+      final exists = await remoteDataSource.checkEmail(email);
+      return Right(exists);
+    } catch (e) {
+      return Left(ServerFailure('Error al verificar correo'));
+    }
+  }
 }

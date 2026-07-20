@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:app_prestaya_flutter/features/rentals/domain/entities/rental_entity.dart';
 import 'package:app_prestaya_flutter/features/rentals/data/models/tenant_model.dart';
+import '../../../loans/data/models/payment_model.dart';
 
 class RentalModel extends RentalEntity {
   const RentalModel({
@@ -16,6 +17,7 @@ class RentalModel extends RentalEntity {
     super.securityDeposit,
     super.status,
     super.amountPaid,
+    super.payments,
   });
 
   factory RentalModel.fromJson(Map<String, dynamic> json) {
@@ -41,6 +43,9 @@ class RentalModel extends RentalEntity {
       securityDeposit: json['securityDeposit'] != null ? (json['securityDeposit'] as num).toDouble() : (json['security_deposit'] != null ? (json['security_deposit'] as num).toDouble() : null),
       status: json['status'] ?? 'PENDING',
       amountPaid: (json['amountPaid'] ?? json['amount_paid'] ?? 0.0).toDouble(),
+      payments: json['payments'] != null 
+          ? (json['payments'] as List).map((p) => PaymentModel.fromJson(p)).toList() 
+          : [],
     );
   }
 

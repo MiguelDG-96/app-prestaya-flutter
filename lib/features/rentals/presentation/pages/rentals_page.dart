@@ -22,6 +22,7 @@ class _RentalsPageState extends State<RentalsPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isDescending = true; // true: Nuevos primero, false: Antiguos primero
   String _searchQuery = '';
+  int? _selectedDay; // 1: Lunes, ..., 7: Domingo
 
   @override
   void initState() {
@@ -57,7 +58,15 @@ class _RentalsPageState extends State<RentalsPage> {
                   } else if (state is RentalsLoaded) {
                     final filteredRentals = state.rentals.where((rental) {
                       final name = rental.tenant?.name.toLowerCase() ?? '';
-                      return name.contains(_searchQuery);
+                      final matchesSearch = name.contains(_searchQuery);
+
+                      if (!matchesSearch) return false;
+
+                      if (_selectedDay != null && rental.dueDate != null) {
+                        return rental.dueDate!.weekday == _selectedDay;
+                      }
+
+                      return true;
                     }).toList();
 
                     // Ordenar por fecha (ID usualmente incremental o fecha de inicio)
@@ -157,6 +166,27 @@ class _RentalsPageState extends State<RentalsPage> {
               ),
               const SizedBox(width: 12),
               GestureDetector(
+                onTap: () => context.read<RentalsBloc>().add(GetRentalsRequested()),
+                child: BlocBuilder<RentalsBloc, RentalsState>(
+                  builder: (context, state) {
+                    return Container(
+                      height: 45,
+                      width: 45,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: state is RentalsLoading
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.refresh, color: Colors.white, size: 20),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
                 onTap: () {
                   setState(() {
                     _isDescending = !_isDescending;
@@ -176,10 +206,80 @@ class _RentalsPageState extends State<RentalsPage> {
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () {
+                  _showDayFilter(context);
+                },
+                child: Container(
+                  height: 45,
+                  width: 45,
+                  decoration: BoxDecoration(
+                    color: _selectedDay != null ? Colors.white : Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.filter_list, 
+                    color: _selectedDay != null ? AppTheme.primary : Colors.white, 
+                    size: 20
+                  ),
+                ),
+              ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  void _showDayFilter(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final days = [
+          {'name': 'Todos los días', 'value': null},
+          {'name': 'Lunes', 'value': 1},
+          {'name': 'Martes', 'value': 2},
+          {'name': 'Miércoles', 'value': 3},
+          {'name': 'Jueves', 'value': 4},
+          {'name': 'Viernes', 'value': 5},
+          {'name': 'Sábado', 'value': 6},
+          {'name': 'Domingo', 'value': 7},
+        ];
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            children: [
+              const Center(
+                child: Text('Filtrar por día de cobro', 
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+                ),
+              ),
+              const SizedBox(height: 15),
+              ...days.map((day) => ListTile(
+                title: Text(day['name'] as String, style: TextStyle(
+                  fontWeight: _selectedDay == day['value'] ? FontWeight.bold : FontWeight.normal,
+                  color: _selectedDay == day['value'] ? AppTheme.primary : AppTheme.text,
+                )),
+                trailing: _selectedDay == day['value'] ? const Icon(Icons.check, color: AppTheme.primary) : null,
+                onTap: () {
+                  setState(() {
+                    _selectedDay = day['value'] as int?;
+                  });
+                  Navigator.pop(context);
+                },
+              )).toList(),
+            ],
+          ),
+        );
+      },
     );
   }
 

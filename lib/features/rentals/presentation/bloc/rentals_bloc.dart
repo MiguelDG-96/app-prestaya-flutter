@@ -34,6 +34,7 @@ class RentalsBloc extends Bloc<RentalsEvent, RentalsState> {
         rentalId: event.rentalId,
         amount: event.amount,
         notes: event.notes,
+        paymentDate: event.paymentDate,
       );
       result.fold(
         (failure) => emit(RentalsError(failure.message)),

@@ -7,6 +7,7 @@ import 'package:app_prestaya_flutter/features/rentals/presentation/bloc/rentals_
 import 'package:app_prestaya_flutter/features/rentals/presentation/bloc/rentals_state.dart';
 import 'package:app_prestaya_flutter/core/widgets/success_dialog.dart';
 import 'package:app_prestaya_flutter/injection_container.dart';
+import 'package:intl/intl.dart';
 
 class AddRentalPaymentPage extends StatefulWidget {
   final RentalEntity rental;
@@ -19,6 +20,7 @@ class AddRentalPaymentPage extends StatefulWidget {
 class _AddRentalPaymentPageState extends State<AddRentalPaymentPage> {
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -94,6 +96,59 @@ class _AddRentalPaymentPageState extends State<AddRentalPaymentPage> {
                     controller: _notesController,
                     hintText: 'Ej. Pago adelantado',
                     icon: Icons.description_outlined,
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Fecha de Pago',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.text),
+                  ),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2101),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(
+                                primary: AppTheme.primary,
+                                onPrimary: Colors.white,
+                                onSurface: AppTheme.text,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null && picked != _selectedDate) {
+                        setState(() {
+                          _selectedDate = picked;
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_today_outlined, color: AppTheme.primary, size: 20),
+                          const SizedBox(width: 12),
+                          Text(
+                            DateFormat('dd / MM / yyyy').format(_selectedDate),
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.text),
+                          ),
+                          const Spacer(),
+                          const Icon(Icons.edit_outlined, color: Colors.grey, size: 18),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 40),
                   SizedBox(
@@ -334,6 +389,7 @@ class _AddRentalPaymentPageState extends State<AddRentalPaymentPage> {
       rentalId: widget.rental.id!,
       amount: amount,
       notes: _notesController.text.trim(),
+      paymentDate: _selectedDate,
     ));
   }
 }

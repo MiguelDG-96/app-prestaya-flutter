@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import 'package:app_prestaya_flutter/core/theme/app_theme.dart';
@@ -27,7 +28,7 @@ class _AddLoanPageState extends State<AddLoanPage> {
   final _interestController = TextEditingController(text: '20');
   final _installmentsController = TextEditingController(text: '1');
   String _frequency = 'Mensual';
-  DateTime _dueDate = DateTime.now().add(const Duration(days: 30));
+  DateTime _startDate = DateTime.now();
 
   @override
   void initState() {
@@ -64,7 +65,9 @@ class _AddLoanPageState extends State<AddLoanPage> {
             context,
             title: '¡Préstamo Registrado!',
             message: 'El préstamo para ${_selectedClient?.name} se ha guardado correctamente.',
-            onDismiss: () => Navigator.pop(context, true),
+          onDismiss: () {
+            Navigator.pop(context, true); // Regresar con éxito
+          },
           );
         } else if (state is LoansError) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -129,7 +132,8 @@ class _AddLoanPageState extends State<AddLoanPage> {
                         interest: double.tryParse(_interestController.text) ?? 0,
                         installments: int.tryParse(_installmentsController.text) ?? 1,
                         frequency: _frequency,
-                        dueDate: _dueDate,
+                        startDate: _startDate,
+                        dueDate: _startDate.add(const Duration(days: 1)),
                       );
 
                       context.read<LoansBloc>().add(AddLoanRequested(loan));
@@ -229,7 +233,10 @@ class _AddLoanPageState extends State<AddLoanPage> {
             label: 'Monto Prestado (S/) *',
             placeholder: '0.00',
             controller: _amountController,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+            ],
           ),
           const SizedBox(height: 16),
           Row(
@@ -239,7 +246,10 @@ class _AddLoanPageState extends State<AddLoanPage> {
                   label: 'Interés (%)',
                   placeholder: '20',
                   controller: _interestController,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                  ],
                 ),
               ),
               const SizedBox(width: 16),
@@ -249,6 +259,9 @@ class _AddLoanPageState extends State<AddLoanPage> {
                   placeholder: '1',
                   controller: _installmentsController,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
                 ),
               ),
             ],
@@ -296,17 +309,52 @@ class _AddLoanPageState extends State<AddLoanPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Fecha de Vencimiento *', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.text)),
+        Row(
+          children: [
+            const Text('Fecha de Préstamo *', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.text)),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.info_outline, size: 18, color: AppTheme.primary),
+              constraints: const BoxConstraints(),
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                    title: Row(
+                      children: const [
+                        Icon(Icons.help_outline, color: AppTheme.primary),
+                        SizedBox(width: 10),
+                        Text('¿Qué es esta fecha?'),
+                      ],
+                    ),
+                    content: const Text(
+                      'Es la fecha en la que se entregó el préstamo al cliente. El sistema calculará automáticamente las fechas de pago según la frecuencia elegida.',
+                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Entendido', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: () async {
             final picked = await showDatePicker(
               context: context,
-              initialDate: _dueDate,
-              firstDate: DateTime.now(),
+              initialDate: _startDate,
+              firstDate: DateTime(2000),
               lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
             );
-            if (picked != null) setState(() => _dueDate = picked);
+            if (picked != null) setState(() => _startDate = picked);
           },
           child: Container(
             padding: const EdgeInsets.all(15),
@@ -317,7 +365,7 @@ class _AddLoanPageState extends State<AddLoanPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(DateFormat('dd/MM/yyyy').format(_dueDate), style: const TextStyle(fontSize: 15)),
+                Text(DateFormat('dd/MM/yyyy').format(_startDate), style: const TextStyle(fontSize: 15)),
                 const Icon(Icons.calendar_month_outlined, color: AppTheme.primary, size: 20),
               ],
             ),
@@ -370,7 +418,7 @@ class _AddLoanPageState extends State<AddLoanPage> {
                   interestRate: double.tryParse(_interestController.text) ?? 0,
                   installments: int.tryParse(_installmentsController.text) ?? 1,
                   frequency: _frequency,
-                  startDate: _dueDate,
+                  startDate: _startDate,
                 );
               },
               icon: const Icon(Icons.calculate_outlined, size: 18),

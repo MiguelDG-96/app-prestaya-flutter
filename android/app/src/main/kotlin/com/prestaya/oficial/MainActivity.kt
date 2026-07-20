@@ -1,4 +1,4 @@
-package com.prestaya.app
+package com.prestaya.oficial
 
 import io.flutter.embedding.android.FlutterActivity
 

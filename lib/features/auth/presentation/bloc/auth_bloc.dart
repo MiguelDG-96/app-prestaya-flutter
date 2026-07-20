@@ -60,6 +60,8 @@ class Authenticated extends AuthState {
   @override
   List<Object?> get props => [user];
 }
+
+typedef AuthAuthenticated = Authenticated; // Alias para compatibilidad o renombramiento progresivo
 class Unauthenticated extends AuthState {}
 class AuthError extends AuthState {
   final String message;

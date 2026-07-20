@@ -21,26 +21,158 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
   final List<int> _selectedInstallments = [];
+  DateTime _selectedDate = DateTime.now();
+  bool _forceCompletion = false;
+  double _adjustmentBalance = 0;
+  int _extraInstallmentsCreated = 0;
+
+  int get _totalInstallmentsLimit {
+    int maxInstallmentFromPayments = widget.loan.installments;
+    for (var p in widget.loan.payments) {
+      final regExp = RegExp(r'cuota (\d+)', caseSensitive: false);
+      final match = regExp.firstMatch(p.notes ?? '');
+      if (match != null) {
+        final num = int.tryParse(match.group(1) ?? '');
+        if (num != null && num > maxInstallmentFromPayments) {
+          maxInstallmentFromPayments = num;
+        }
+      }
+    }
+    return maxInstallmentFromPayments + _extraInstallmentsCreated;
+  }
+
+  bool _isInstallmentPaid(int i) {
+    if ((widget.loan.paidAmount ?? 0) >= (widget.loan.totalToPay ?? 0) - 0.01) {
+      return true;
+    }
+    if (i <= (widget.loan.currentInstallment ?? 0)) {
+      return true;
+    }
+    final isForcedPaid = widget.loan.payments.any((p) => 
+      (p.notes ?? '').toLowerCase().contains('cuota $i') && 
+      (p.notes ?? '').toLowerCase().contains('completada')
+    );
+    if (isForcedPaid) return true;
+    
+    final isExtra = i > widget.loan.installments;
+    if (isExtra) {
+      final paymentsForThisInst = widget.loan.payments.where((p) => 
+        (p.notes ?? '').toLowerCase().contains('cuota $i')
+      );
+      final totalPaidForThisInst = paymentsForThisInst.fold<double>(0.0, (acc, p) => acc + (p.amount ?? 0.0));
+      
+      final baseAmount = (widget.loan.totalToPay ?? 0) / widget.loan.installments;
+      double amount = baseAmount;
+      if (totalPaidForThisInst > 0) {
+        amount = totalPaidForThisInst;
+      } else {
+        amount = baseAmount;
+      }
+      
+      if (totalPaidForThisInst >= amount) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  double _getInstallmentTargetAmount(int number) {
+    final totalToPay = widget.loan.totalToPay ?? 0;
+    final totalInstallments = widget.loan.installments;
+    final installmentAmount = totalToPay / totalInstallments;
+    if (number <= totalInstallments) {
+      return installmentAmount;
+    }
+    
+    final paymentsForThisInst = widget.loan.payments.where((p) => 
+      (p.notes ?? '').toLowerCase().contains('cuota $number')
+    );
+    final totalPaidForThisInst = paymentsForThisInst.fold<double>(0.0, (acc, p) => acc + (p.amount ?? 0.0));
+    if (totalPaidForThisInst > 0) {
+      return totalPaidForThisInst;
+    }
+    
+    final paidAmount = widget.loan.paidAmount ?? 0;
+    return (totalToPay - paidAmount).clamp(0.0, installmentAmount);
+  }
+
+  int get _effectivePaidCount {
+    int count = 0;
+    int limit = _totalInstallmentsLimit;
+    for (int i = 1; i <= limit; i++) {
+      if (_isInstallmentPaid(i)) {
+        count = i;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }
+
+  bool get _isLoanFullyPaid {
+    return (widget.loan.paidAmount ?? 0) >= (widget.loan.totalToPay ?? 0) - 0.01;
+  }
+
+  bool get _canCreateExtraInstallment {
+    if (_isLoanFullyPaid) return false;
+    int limit = _totalInstallmentsLimit;
+    for (int i = 1; i <= limit; i++) {
+      if (!_isInstallmentPaid(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   @override
   void initState() {
     super.initState();
-    final next = (widget.loan.currentInstallment ?? 0) + 1;
-    if (next <= widget.loan.installments) {
+    
+    if (_canCreateExtraInstallment) {
+      _extraInstallmentsCreated = 1;
+    }
+
+    final next = _effectivePaidCount + 1;
+    if (next <= _totalInstallmentsLimit && !_isLoanFullyPaid) {
       _selectedInstallments.add(next);
       _updateAmount();
     }
   }
 
   void _updateAmount() {
-    final installmentAmount = (widget.loan.totalToPay ?? 0) / widget.loan.installments;
-    final totalSelected = _selectedInstallments.length * installmentAmount;
-    _amountController.text = totalSelected.toStringAsFixed(2);
+    final totalToPay = widget.loan.totalToPay ?? 0;
+    final paidAmount = widget.loan.paidAmount ?? 0;
+    final totalInstallments = widget.loan.installments;
+    final installmentAmount = totalToPay / totalInstallments;
+    
+    bool hasExtraSelected = _selectedInstallments.any((num) => num > totalInstallments);
+    
+    if (hasExtraSelected) {
+      final remainingBalance = (totalToPay - paidAmount).clamp(0.0, double.infinity);
+      _adjustmentBalance = 0;
+      
+      double finalAmount = installmentAmount;
+      if (remainingBalance < installmentAmount) {
+        finalAmount = remainingBalance;
+      }
+      _amountController.text = finalAmount.toStringAsFixed(2);
+    } else {
+      final expectedPaid = _effectivePaidCount * installmentAmount;
+      final balance = paidAmount - expectedPaid;
+      
+      _adjustmentBalance = balance;
+      
+      double totalSelectedBase = _selectedInstallments.length * installmentAmount;
+      double finalAmount = totalSelectedBase - balance;
+      
+      _amountController.text = finalAmount.toStringAsFixed(2);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final next = (widget.loan.currentInstallment ?? 0) + 1;
+    final effectivePaidCount = _effectivePaidCount;
+    final next = effectivePaidCount + 1;
     final total = widget.loan.totalToPay ?? 0;
     final paid = widget.loan.paidAmount ?? 0;
     final pending = total - paid;
@@ -48,11 +180,10 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
     // Cálculo de abono parcial
     final totalInstallments = widget.loan.installments;
     final installmentAmount = total / totalInstallments;
-    final completedInstallments = widget.loan.currentInstallment ?? 0;
-    final expectedPaidForCompleted = completedInstallments * installmentAmount;
+    final expectedPaidForCompleted = effectivePaidCount * installmentAmount;
     final accumulatedForNext = paid - expectedPaidForCompleted;
     final remainingToComplete = installmentAmount - accumulatedForNext;
-    final hasPartialAbono = accumulatedForNext > 0.05; // Margen para errores de redondeo
+    final hasPartialAbono = accumulatedForNext > 0.05 && !_isLoanFullyPaid;
 
     return BlocListener<LoansBloc, LoansState>(
       listener: (context, state) {
@@ -91,7 +222,7 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildLoanSummaryCard(total, paid, pending, next),
-              if (hasPartialAbono) ...[
+              if (hasPartialAbono || _adjustmentBalance.abs() > 0.01) ...[
                 const SizedBox(height: 20),
                 _buildInfoBox(accumulatedForNext, remainingToComplete),
               ],
@@ -105,19 +236,103 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
                 keyboardType: TextInputType.number,
                 icon: Icons.payments_outlined,
               ),
+              const SizedBox(height: 15),
+              
+              // Alerta de Pago Parcial y Switch de Completado
+              if (_amountController.text.isNotEmpty && 
+                  (double.tryParse(_amountController.text) ?? 0) < 
+                  (_selectedInstallments.length * ((widget.loan.totalToPay ?? 0) / widget.loan.installments) - _adjustmentBalance))
+                Container(
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFFFEDD5)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.info_outline, color: Color(0xFFC2410C), size: 20),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'El monto es menor al total sugerido. ¿Deseas marcar la cuota como completada?',
+                              style: TextStyle(color: Color(0xFFC2410C), fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SwitchListTile(
+                        value: _forceCompletion,
+                        onChanged: (val) => setState(() => _forceCompletion = val),
+                        title: const Text('Completar cuota y pasar saldo', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        activeColor: const Color(0xFF10B981),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 20),
-              const Text('Notas (Opcional)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text('Fecha de Pago', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              CustomInput(
-                label: 'Notas',
-                controller: _notesController,
-                placeholder: 'Ej. Pago cuota 3',
-                icon: Icons.description_outlined,
+              GestureDetector(
+                onTap: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2101),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: const ColorScheme.light(
+                            primary: AppTheme.primary,
+                            onPrimary: Colors.white,
+                            onSurface: AppTheme.text,
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (picked != null && picked != _selectedDate) {
+                    setState(() {
+                      _selectedDate = picked;
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.grey[200]!),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined, color: AppTheme.primary, size: 20),
+                      const SizedBox(width: 12),
+                      Text(
+                        DateFormat('dd / MM / yyyy').format(_selectedDate),
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.text),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.edit_outlined, color: Colors.grey, size: 18),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 40),
               CustomButton(
-                title: 'Confirmar Pago',
+                title: _isLoanFullyPaid ? 'Préstamo Completado' : 'Confirmar Pago',
                 onPress: () {
+                  if (_isLoanFullyPaid) return;
                   if (_amountController.text.isEmpty || double.tryParse(_amountController.text) == 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Por favor ingresa un monto válido')),
@@ -166,7 +381,9 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
                   const Icon(Icons.layers_outlined, color: AppTheme.primary, size: 20),
                   const SizedBox(width: 10),
                   Text(
-                    'Siguiente: Cuota $next de ${widget.loan.installments}',
+                    next > widget.loan.installments
+                        ? 'Siguiente: Cuota $next (Adicional)'
+                        : 'Siguiente: Cuota $next de ${widget.loan.installments}',
                     style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
@@ -211,9 +428,6 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
-          final installmentAmount = (widget.loan.totalToPay ?? 0) / widget.loan.installments;
-          final paidCount = widget.loan.currentInstallment ?? 0;
-
           return Container(
             height: MediaQuery.of(context).size.height * 0.75,
             decoration: const BoxDecoration(
@@ -232,10 +446,10 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: widget.loan.installments,
+                    itemCount: _totalInstallmentsLimit,
                     itemBuilder: (context, index) {
                       final number = index + 1;
-                      final isAlreadyPaid = number <= paidCount;
+                      final isAlreadyPaid = _isInstallmentPaid(number);
                       final isSelected = _selectedInstallments.contains(number);
 
                       return Container(
@@ -282,8 +496,15 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
                                   )
                                 ),
                           ),
-                          title: Text('Cuota $number', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(isAlreadyPaid ? 'Pagado' : 'S/ ${installmentAmount.toStringAsFixed(2)}'),
+                          title: Text(
+                            number > widget.loan.installments 
+                                ? 'Cuota $number (Adicional)' 
+                                : 'Cuota $number', 
+                            style: const TextStyle(fontWeight: FontWeight.bold)
+                          ),
+                          subtitle: Text(isAlreadyPaid 
+                              ? 'Pagado' 
+                              : 'S/ ${(_getInstallmentTargetAmount(number)).toStringAsFixed(2)}'),
                           trailing: isAlreadyPaid 
                             ? const Text('PAGADO', style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12))
                             : Checkbox(
@@ -306,6 +527,33 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
                     },
                   ),
                 ),
+                if (_canCreateExtraInstallment) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        minimumSize: const Size.fromHeight(50),
+                        side: const BorderSide(color: AppTheme.primary),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                      icon: const Icon(Icons.add, color: AppTheme.primary),
+                      label: const Text('Crear Cuota Adicional', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        setModalState(() {
+                          _extraInstallmentsCreated++;
+                          final next = _effectivePaidCount + 1;
+                          if (!_selectedInstallments.contains(next)) {
+                            _selectedInstallments.add(next);
+                          }
+                          _updateAmount();
+                        });
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 Padding(
                   padding: const EdgeInsets.all(20),
                   child: CustomButton(
@@ -391,15 +639,26 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
                   ),
                   onPressed: () {
                     final amount = double.parse(_amountController.text);
+                    
+                    // Generar nota automática que incluya el número de cuota para el mapeo
+                    final installmentsText = _selectedInstallments.isEmpty 
+                        ? ((widget.loan.currentInstallment ?? 0) + 1).toString()
+                        : _selectedInstallments.join(', ');
+                        
+                    final baseNote = 'Pago de Cuota $installmentsText. ${_notesController.text}'.trim();
+                    final finalNote = _forceCompletion ? '$baseNote [COMPLETADA]' : baseNote;
+
                     context.read<LoansBloc>().add(
                       AddPaymentRequested(
                         PaymentEntity(
                           loanId: widget.loan.id!,
                           amount: amount,
-                          notes: _notesController.text,
+                          notes: finalNote,
+                          paymentDate: _selectedDate,
                         ),
                       ),
                     );
+
                     Navigator.pop(context);
                   },
                   child: const Text('Sí, confirmar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -412,29 +671,39 @@ class _RegisterPaymentPageState extends State<RegisterPaymentPage> {
     );
   }
   Widget _buildInfoBox(double accumulated, double remaining) {
+    String message = '';
+    if (_adjustmentBalance < 0) {
+      message = 'Se incluye un recargo de S/ ${(-_adjustmentBalance).toStringAsFixed(2)} por saldo pendiente anterior.';
+    } else if (_adjustmentBalance > 0) {
+      message = 'Se aplica un descuento de S/ ${_adjustmentBalance.toStringAsFixed(2)} por pago excedente anterior.';
+    } else {
+      message = 'Abono actual: S/ ${accumulated.toStringAsFixed(2)} | Falta: S/ ${remaining.toStringAsFixed(2)} para completar.';
+    }
+
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7ED),
+        color: _adjustmentBalance != 0 ? const Color(0xFFEEF2FF) : const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFFFFEDD5)),
+        border: Border.all(color: _adjustmentBalance != 0 ? const Color(0xFFE0E7FF) : const Color(0xFFFFEDD5)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info, color: Color(0xFFC2410C), size: 20),
+          Icon(
+            _adjustmentBalance != 0 ? Icons.info_outline : Icons.info, 
+            color: _adjustmentBalance != 0 ? const Color(0xFF4338CA) : const Color(0xFFC2410C), 
+            size: 20
+          ),
           const SizedBox(width: 12),
           Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(color: Color(0xFFC2410C), fontSize: 13, height: 1.4),
-                children: [
-                  const TextSpan(text: 'Abono actual: '),
-                  TextSpan(text: 'S/ ${accumulated.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const TextSpan(text: ' | Falta: '),
-                  TextSpan(text: 'S/ ${remaining.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const TextSpan(text: ' para completar la cuota.'),
-                ],
+            child: Text(
+              message,
+              style: TextStyle(
+                color: _adjustmentBalance != 0 ? const Color(0xFF4338CA) : const Color(0xFFC2410C), 
+                fontSize: 13, 
+                height: 1.4,
+                fontWeight: _adjustmentBalance != 0 ? FontWeight.bold : FontWeight.normal
               ),
             ),
           ),

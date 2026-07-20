@@ -24,15 +24,17 @@ class AddRentalPaymentRequested extends RentalsEvent {
   final String rentalId;
   final double amount;
   final String? notes;
+  final DateTime? paymentDate;
 
   const AddRentalPaymentRequested({
     required this.rentalId,
     required this.amount,
     this.notes,
+    this.paymentDate,
   });
 
   @override
-  List<Object?> get props => [rentalId, amount, notes];
+  List<Object?> get props => [rentalId, amount, notes, paymentDate];
 }
 
 class DeleteRentalRequested extends RentalsEvent {

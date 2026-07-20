@@ -20,6 +20,7 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final data = await remoteDataSource.login(email, password);
       final token = data['token'] as String;
+      final refreshToken = data['refreshToken'] as String?;
       
       final userMap = data['user'] != null ? data['user'] as Map<String, dynamic> : data;
       
@@ -30,6 +31,9 @@ class AuthRepositoryImpl implements AuthRepository {
       final userModel = UserModel.fromJson(userMap);
 
       await storage.write(key: DioClient.tokenKey, value: token);
+      if (refreshToken != null) {
+        await storage.write(key: DioClient.refreshTokenKey, value: refreshToken);
+      }
       await storage.write(key: '@user_profile', value: jsonEncode(userModel.toJson()));
 
       return Right(userModel);
@@ -45,6 +49,7 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final data = await remoteDataSource.loginWithGoogle(idToken);
       final token = data['token'] as String;
+      final refreshToken = data['refreshToken'] as String?;
       
       final userMap = data['user'] != null ? data['user'] as Map<String, dynamic> : data;
       
@@ -55,6 +60,9 @@ class AuthRepositoryImpl implements AuthRepository {
       final userModel = UserModel.fromJson(userMap);
 
       await storage.write(key: DioClient.tokenKey, value: token);
+      if (refreshToken != null) {
+        await storage.write(key: DioClient.refreshTokenKey, value: refreshToken);
+      }
       await storage.write(key: '@user_profile', value: jsonEncode(userModel.toJson()));
 
       return Right(userModel);
@@ -68,6 +76,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> logout() async {
     await storage.delete(key: DioClient.tokenKey);
+    await storage.delete(key: DioClient.refreshTokenKey);
     await storage.delete(key: '@user_profile');
   }
 

@@ -33,8 +33,8 @@ class FirebaseService {
         playSound: true,
       );
 
-      // Usamos dynamic para evitar el error de argumentos posicionales del compilador
-      final dynamic notificationsPlugin = di.sl<fln.FlutterLocalNotificationsPlugin>();
+      // Se usa la clase directamente y no dynamic
+      final fln.FlutterLocalNotificationsPlugin notificationsPlugin = di.sl<fln.FlutterLocalNotificationsPlugin>();
 
       await notificationsPlugin
           .resolvePlatformSpecificImplementation<fln.AndroidFlutterLocalNotificationsPlugin>()
@@ -44,7 +44,7 @@ class FirebaseService {
       const fln.InitializationSettings initializationSettings = fln.InitializationSettings(android: initializationSettingsAndroid);
       
       await notificationsPlugin.initialize(
-        initializationSettings,
+        settings: initializationSettings,
         onDidReceiveNotificationResponse: (fln.NotificationResponse details) async {
           if (details.payload != null) {
             final payload = details.payload!;
@@ -100,13 +100,13 @@ class FirebaseService {
     
     const fln.NotificationDetails platformChannelSpecifics = fln.NotificationDetails(android: androidPlatformChannelSpecifics);
     
-    final dynamic notificationsPlugin = di.sl<fln.FlutterLocalNotificationsPlugin>();
+    final fln.FlutterLocalNotificationsPlugin notificationsPlugin = di.sl<fln.FlutterLocalNotificationsPlugin>();
     
     await notificationsPlugin.show(
-      payload.hashCode, 
-      title,
-      body,
-      platformChannelSpecifics,
+      id: payload.hashCode, 
+      title: title,
+      body: body,
+      notificationDetails: platformChannelSpecifics,
       payload: payload,
     );
   }

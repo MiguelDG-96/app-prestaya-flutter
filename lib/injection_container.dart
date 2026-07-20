@@ -9,6 +9,7 @@ import 'package:app_prestaya_flutter/features/stats/data/repositories/stats_repo
 import 'package:app_prestaya_flutter/features/stats/presentation/bloc/stats_bloc.dart' as stats_bloc;
 import 'package:app_prestaya_flutter/core/services/export_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:app_prestaya_flutter/core/services/apis_peru_service.dart';
 
 // Auth
 import 'features/auth/domain/repositories/auth_repository.dart';
@@ -47,7 +48,24 @@ final sl = GetIt.instance;
 Future<void> init() async {
   // Core / External
   if (!sl.isRegistered<FlutterSecureStorage>()) {
-    sl.registerLazySingleton(() => const FlutterSecureStorage());
+    sl.registerLazySingleton(() => const FlutterSecureStorage(
+      // ── ANDROID (no afecta iOS ni escritorio) ──────────────────────────
+      // encryptedSharedPreferences: requerido en Android 14+ (Galaxy A05, One UI 7)
+      //   y retrocompatible con Android 6+ (API 23). Dispositivos < API 23 usan
+      //   KeyStore sin encriptación adicional — comportamiento idéntico al anterior.
+      // resetOnError: si el Keystore de Samsung se corrompe (bug conocido de One UI),
+      //   resetea el storage en lugar de crashear. En otros dispositivos nunca se activa.
+      aOptions: AndroidOptions(
+        encryptedSharedPreferences: true,
+        resetOnError: true,
+      ),
+      // ── iOS / macOS (no afecta Android) ───────────────────────────────
+      // accesible = always: permite acceder al token aunque el dispositivo esté bloqueado
+      // (necesario para que las notificaciones push funcionen en background en iOS)
+      iOptions: IOSOptions(
+        accessibility: KeychainAccessibility.first_unlock,
+      ),
+    ));
   }
   
   final sharedPreferences = await SharedPreferences.getInstance();
@@ -59,7 +77,7 @@ Future<void> init() async {
 
   if (!sl.isRegistered<gsign.GoogleSignIn>()) {
     sl.registerLazySingleton(() => gsign.GoogleSignIn(
-      serverClientId: '1014571855006-e7h8pmlebp3aummncmnm67pcgauq1kqq.apps.googleusercontent.com',
+      serverClientId: '398995049354-hu5s511h1kon7v5l527itu5nlfoqorqa.apps.googleusercontent.com',
     ));
   }
 
@@ -113,6 +131,7 @@ Future<void> init() async {
       addClientUseCase: sl(),
       updateClientUseCase: sl(),
       deleteClientUseCase: sl(),
+      repository: sl(),
     ));
   }
 
@@ -172,5 +191,9 @@ Future<void> init() async {
   //! Core
   if (!sl.isRegistered<ExportService>()) {
     sl.registerLazySingleton(() => ExportService(sl()));
+  }
+
+  if (!sl.isRegistered<ApisPeruService>()) {
+    sl.registerLazySingleton(() => ApisPeruService(sl()));
   }
 }

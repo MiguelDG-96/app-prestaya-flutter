@@ -1,5 +1,6 @@
 import '../../domain/entities/loan_entity.dart';
 import 'package:intl/intl.dart';
+import 'payment_model.dart';
 
 class LoanModel extends LoanEntity {
   const LoanModel({
@@ -9,11 +10,13 @@ class LoanModel extends LoanEntity {
     required super.interest,
     required super.installments,
     required super.frequency,
+    required super.startDate,
     required super.dueDate,
     super.clientName,
     super.currentInstallment,
     super.paidAmount,
     super.totalToPay,
+    super.payments,
   });
 
   factory LoanModel.fromJson(Map<String, dynamic> json) {
@@ -42,11 +45,15 @@ class LoanModel extends LoanEntity {
       interest: interestVal,
       installments: (json['totalInstallments'] ?? json['total_installments'] ?? 0) as int,
       frequency: json['frequency'] ?? 'MONTHLY',
+      startDate: json['startDate'] != null ? DateTime.parse(json['startDate']) : (json['start_date'] != null ? DateTime.parse(json['start_date']) : DateTime.now()),
       dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : (json['due_date'] != null ? DateTime.parse(json['due_date']) : DateTime.now()),
       clientName: name ?? json['clientName'] ?? json['client_name'],
       currentInstallment: (json['paidInstallments'] ?? json['paid_installments'] ?? 0) as int,
       paidAmount: (json['amountPaid'] ?? json['amount_paid'] ?? 0.0).toDouble(),
       totalToPay: totalToPay,
+      payments: json['payments'] != null 
+          ? (json['payments'] as List).map((p) => PaymentModel.fromJson(p)).toList() 
+          : [],
     );
   }
 
@@ -57,7 +64,7 @@ class LoanModel extends LoanEntity {
       'amount': amount,
       'interestRate': interest,
       'totalInstallments': installments,
-      'startDate': DateFormat('yyyy-MM-dd').format(DateTime.now()), // El backend pide startDate
+      'startDate': DateFormat('yyyy-MM-dd').format(startDate), // El backend pide startDate
       'paymentFrequency': _mapFrequencyToBackend(frequency),
     };
   }

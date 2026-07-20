@@ -41,14 +41,22 @@ class RentalPaymentHistoryPage extends StatelessWidget {
                 final monthNumber = index + 1;
                 final isPaid = monthNumber <= paidMonths;
                 
-                // Calcular fecha aproximada de cada mes
-                final monthDate = DateTime(
+                // Intentar obtener la fecha real del pago si existe
+                DateTime? realPaymentDate;
+                if (isPaid && rental.payments.length > index) {
+                  realPaymentDate = rental.payments[index].paymentDate;
+                }
+
+                // Calcular fecha programada de cada mes
+                final scheduledDate = DateTime(
                   rental.startDate.year,
                   rental.startDate.month + index,
                   rental.startDate.day,
                 );
 
-                return _buildMonthItem(monthNumber, isPaid, monthlyRent, monthDate);
+                final displayDate = realPaymentDate ?? scheduledDate;
+
+                return _buildMonthItem(monthNumber, isPaid, monthlyRent, displayDate);
               },
             ),
           ),
@@ -74,19 +82,24 @@ class RentalPaymentHistoryPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    rental.tenant?.name ?? 'Inquilino',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    'Cuarto: ${rental.roomNumber}',
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rental.tenant?.name ?? 'Inquilino',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    Text(
+                      'Cuarto: ${rental.roomNumber}',
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(

@@ -8,6 +8,7 @@ class UserModel extends UserEntity {
     super.phone,
     super.photoUrl,
     super.role,
+    super.permissions = const [],
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -18,6 +19,9 @@ class UserModel extends UserEntity {
       phone: json['phone'] as String?,
       photoUrl: json['photoUrl'] as String?,
       role: json['role'] as String?,
+      permissions: json['permissions'] != null 
+          ? List<String>.from(json['permissions'] as List) 
+          : (json['authorities'] != null ? List<String>.from(json['authorities'] as List) : []),
     );
   }
 
@@ -29,6 +33,7 @@ class UserModel extends UserEntity {
       'phone': phone,
       'photoUrl': photoUrl,
       'role': role,
+      'permissions': permissions,
     };
   }
 }

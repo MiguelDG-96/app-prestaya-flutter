@@ -5,6 +5,7 @@ import 'package:app_prestaya_flutter/features/auth/data/models/user_model.dart';
 abstract class AuthRemoteDataSource {
   Future<Map<String, dynamic>> login(String email, String password);
   Future<Map<String, dynamic>> loginWithGoogle(String idToken);
+  Future<Map<String, dynamic>> refreshToken(String refreshToken);
   Future<void> updatePushToken(String token);
   Future<String> uploadPhoto(String userId, String filePath);
   Future<Map<String, dynamic>> updateProfile({String? name, String? phone});
@@ -28,6 +29,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<Map<String, dynamic>> loginWithGoogle(String idToken) async {
     final response = await client.post('/auth/google', data: {
       'idToken': idToken,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  @override
+  Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
+    final response = await client.post('/auth/refresh', data: {
+      'refreshToken': refreshToken,
     });
     return response.data as Map<String, dynamic>;
   }

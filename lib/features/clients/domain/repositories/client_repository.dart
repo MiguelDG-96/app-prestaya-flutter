@@ -7,4 +7,6 @@ abstract class ClientRepository {
   Future<Either<Failure, ClientEntity>> addClient(Map<String, dynamic> clientData);
   Future<Either<Failure, ClientEntity>> updateClient(String id, Map<String, dynamic> clientData);
   Future<Either<Failure, void>> deleteClient(String id);
+  Future<Either<Failure, bool>> checkDni(String dni);
+  Future<Either<Failure, bool>> checkEmail(String email);
 }

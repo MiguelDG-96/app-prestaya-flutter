@@ -15,22 +15,42 @@ class RentalsRepositoryImpl implements RentalsRepository {
   @override
   Future<Either<Failure, RentalEntity>> addRental(RentalEntity rental) async {
     try {
-      // 1. Crear el Inquilino primero
-      final tenantModel = TenantModel(
-        name: rental.tenant!.name,
-        phone: rental.tenant!.phone,
-        dni: rental.tenant!.dni,
-        address: rental.tenant!.address,
-        roomNumber: rental.tenant!.roomNumber,
-        email: rental.tenant!.email,
-      );
+      String? finalTenantId;
+      
+      // Buscar si el inquilino ya existe en la tabla tenants por DNI
+      if (rental.tenant?.dni != null && rental.tenant!.dni.isNotEmpty) {
+        final tenantsResponse = await dioClient.get('/tenants');
+        final tenantsList = tenantsResponse.data as List;
+        
+        final existingTenant = tenantsList.cast<Map<String, dynamic>>().firstWhere(
+          (t) => t['dni'] == rental.tenant!.dni, 
+          orElse: () => <String, dynamic>{}
+        );
 
-      final tenantResponse = await dioClient.post('/tenants', data: tenantModel.toJson());
-      final createdTenant = TenantModel.fromJson(tenantResponse.data);
+        if (existingTenant.isNotEmpty) {
+          finalTenantId = existingTenant['id'];
+        }
+      }
+      
+      // Si no existe como inquilino, lo creamos
+      if (finalTenantId == null) {
+        final tenantModel = TenantModel(
+          name: rental.tenant!.name,
+          phone: rental.tenant!.phone,
+          dni: rental.tenant!.dni,
+          address: rental.tenant!.address,
+          roomNumber: rental.tenant!.roomNumber,
+          email: rental.tenant!.email,
+        );
 
-      // 2. Crear el Alquiler con el ID del inquilino creado
+        final tenantResponse = await dioClient.post('/tenants', data: tenantModel.toJson());
+        final createdTenant = TenantModel.fromJson(tenantResponse.data);
+        finalTenantId = createdTenant.id;
+      }
+
+      // 2. Crear el Alquiler con el ID del inquilino verificado
       final rentalData = {
-        'tenantId': createdTenant.id,
+        'tenantId': finalTenantId,
         'roomId': rental.roomNumber,
         'monthlyRent': rental.amount,
         'startDate': rental.startDate.toIso8601String().split('T')[0],
@@ -67,12 +87,14 @@ class RentalsRepositoryImpl implements RentalsRepository {
     required String rentalId,
     required double amount,
     String? notes,
+    DateTime? paymentDate,
   }) async {
     try {
       final paymentData = {
         'rental': {'id': rentalId},
         'amount': amount,
         'notes': notes,
+        if (paymentDate != null) 'paymentDate': paymentDate.toIso8601String().split('T')[0],
       };
 
       await dioClient.post('/payments', data: paymentData);

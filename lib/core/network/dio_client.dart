@@ -5,6 +5,7 @@ class DioClient {
   final Dio _dio;
   final FlutterSecureStorage _storage;
   static const String tokenKey = '@auth_token';
+  static const String refreshTokenKey = '@refresh_token';
 
   DioClient(this._dio, this._storage) {
     _dio
@@ -15,9 +16,16 @@ class DioClient {
       ..interceptors.add(_getAuthInterceptor());
   }
 
+  bool _isRefreshing = false;
+  final List<Map<String, dynamic>> _failedRequests = [];
+
   Interceptor _getAuthInterceptor() {
     return InterceptorsWrapper(
       onRequest: (options, handler) async {
+        if (options.path.contains('/auth/login') || options.path.contains('/auth/refresh')) {
+          return handler.next(options);
+        }
+
         final token = await _storage.read(key: tokenKey);
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
@@ -25,14 +33,64 @@ class DioClient {
         return handler.next(options);
       },
       onError: (DioException e, handler) async {
-        if (e.response?.statusCode == 401) {
-          // Limpiar storage tal como en React Native
-          await _storage.delete(key: tokenKey);
-          await _storage.delete(key: '@user_profile');
+        if (e.response?.statusCode == 401 && !e.requestOptions.path.contains('/auth/refresh')) {
+          final refreshToken = await _storage.read(key: refreshTokenKey);
+          if (refreshToken == null) {
+            await _clearSession();
+            return handler.next(e);
+          }
+
+          if (!_isRefreshing) {
+            _isRefreshing = true;
+            try {
+              final newDio = Dio(BaseOptions(baseUrl: _dio.options.baseUrl));
+              final response = await newDio.post('/auth/refresh', data: {
+                'refreshToken': refreshToken,
+              });
+
+              final newToken = response.data['token'];
+              final newRefreshToken = response.data['refreshToken'];
+
+              await _storage.write(key: tokenKey, value: newToken);
+              if (newRefreshToken != null) {
+                await _storage.write(key: refreshTokenKey, value: newRefreshToken);
+              }
+
+              _dio.options.headers['Authorization'] = 'Bearer $newToken';
+              e.requestOptions.headers['Authorization'] = 'Bearer $newToken';
+              
+              for (var request in _failedRequests) {
+                request['options'].headers['Authorization'] = 'Bearer $newToken';
+                _dio.fetch(request['options']).then(
+                  (res) => request['handler'].resolve(res),
+                  onError: (err) => request['handler'].reject(err),
+                );
+              }
+              _failedRequests.clear();
+              _isRefreshing = false;
+
+              final retryResponse = await _dio.fetch(e.requestOptions);
+              return handler.resolve(retryResponse);
+            } catch (err) {
+              _isRefreshing = false;
+              _failedRequests.clear();
+              await _clearSession();
+              return handler.next(e);
+            }
+          } else {
+            _failedRequests.add({'options': e.requestOptions, 'handler': handler});
+            return; // Esperar a que el refresh termine
+          }
         }
         return handler.next(e);
       },
     );
+  }
+
+  Future<void> _clearSession() async {
+    await _storage.delete(key: tokenKey);
+    await _storage.delete(key: refreshTokenKey);
+    await _storage.delete(key: '@user_profile');
   }
 
   Dio get dio => _dio;

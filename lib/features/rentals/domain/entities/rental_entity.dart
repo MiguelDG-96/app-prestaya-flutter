@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'tenant_entity.dart';
+import '../../../loans/domain/entities/payment_entity.dart';
 
 class RentalEntity extends Equatable {
   final String? id;
@@ -14,6 +15,7 @@ class RentalEntity extends Equatable {
   final double? securityDeposit;
   final String status;
   final double amountPaid;
+  final List<PaymentEntity> payments;
 
   const RentalEntity({
     this.id,
@@ -28,6 +30,7 @@ class RentalEntity extends Equatable {
     this.securityDeposit,
     this.status = 'PENDING',
     this.amountPaid = 0.0,
+    this.payments = const [],
   });
 
   @override
@@ -44,5 +47,6 @@ class RentalEntity extends Equatable {
         securityDeposit,
         status,
         amountPaid,
+        payments,
       ];
 }

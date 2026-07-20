@@ -12,6 +12,7 @@ import 'package:app_prestaya_flutter/features/stats/presentation/bloc/stats_bloc
 import 'package:app_prestaya_flutter/core/services/firebase_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'injection_container.dart' as di;
 
 final sl = di.sl;
@@ -44,6 +45,14 @@ class MyApp extends StatelessWidget {
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('es', 'ES'),
+        ],
         initialRoute: '/',
         routes: {
           '/': (context) => const SplashPage(),

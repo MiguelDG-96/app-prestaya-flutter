@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:app_prestaya_flutter/core/theme/app_theme.dart';
 
 class CustomInput extends StatelessWidget {
@@ -8,6 +9,10 @@ class CustomInput extends StatelessWidget {
   final bool isPassword;
   final TextInputType keyboardType;
   final IconData? icon;
+  final String? errorText;
+  final FocusNode? focusNode;
+  final List<TextInputFormatter>? inputFormatters;
+  final Widget? suffixIcon;
 
   const CustomInput({
     super.key,
@@ -17,6 +22,10 @@ class CustomInput extends StatelessWidget {
     this.isPassword = false,
     this.keyboardType = TextInputType.text,
     this.icon,
+    this.errorText,
+    this.focusNode,
+    this.inputFormatters,
+    this.suffixIcon,
   });
 
   @override
@@ -37,15 +46,19 @@ class CustomInput extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFFF5F7FA),
             borderRadius: BorderRadius.circular(15),
+            border: errorText != null ? Border.all(color: Colors.red.shade400, width: 1.5) : null,
           ),
           child: TextField(
             controller: controller,
+            focusNode: focusNode,
             obscureText: isPassword,
             keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
             style: const TextStyle(fontSize: 15),
             decoration: InputDecoration(
               hintText: placeholder,
               prefixIcon: icon != null ? Icon(icon, color: AppTheme.textSecondary, size: 20) : null,
+              suffixIcon: suffixIcon,
               hintStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
               border: InputBorder.none,
               contentPadding: EdgeInsets.symmetric(
@@ -55,6 +68,14 @@ class CustomInput extends StatelessWidget {
             ),
           ),
         ),
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              errorText!,
+              style: TextStyle(color: Colors.red.shade400, fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          ),
       ],
     );
   }

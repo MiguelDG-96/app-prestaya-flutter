@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'add_rental_payment_page.dart';
 import 'rental_payment_history_page.dart';
 import 'add_rental_page.dart';
+import 'package:app_prestaya_flutter/core/utils/permission_helper.dart';
 
 class RentalDetailPage extends StatelessWidget {
   final RentalEntity rental;
@@ -72,28 +73,42 @@ class RentalDetailPage extends StatelessWidget {
           ),
           Row(
             children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.edit_note, color: Colors.white),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => AddRentalPage(rental: rental)),
+              PermissionHelper.guarded(
+                context: context,
+                permission: AppPermissions.alquileresUpdate,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.edit_note, color: Colors.white),
+                    onPressed: () {
+                      if (rental.paidMonths > 0 || rental.amountPaid > 0) {
+                        _showPaymentWarningDialog(context, 'editar');
+                        return;
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => AddRentalPage(rental: rental)),
+                      );
+                    },
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.white),
-                  onPressed: () => _showDeleteConfirmation(context),
+              PermissionHelper.guarded(
+                context: context,
+                permission: AppPermissions.alquileresDelete,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.white),
+                    onPressed: () => _showDeleteConfirmation(context),
+                  ),
                 ),
               ),
             ],
@@ -103,22 +118,36 @@ class RentalDetailPage extends StatelessWidget {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context) {
-    if (rental.paidMonths > 0) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('No se puede eliminar', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text('Este alquiler ya tiene pagos registrados y no puede ser eliminado.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Entendido', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
-            ),
+  void _showPaymentWarningDialog(BuildContext context, String action) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 10),
+            Text('Acción no permitida', style: TextStyle(color: Colors.orange)),
           ],
         ),
-      );
+        content: Text(
+          'No puedes $action este alquiler porque ya cuenta con pagos registrados.\n\n'
+          'Si necesitas corregir algo, deberás eliminar los pagos primero o crear un nuevo registro.',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Entendido', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context) {
+    if (rental.paidMonths > 0 || rental.amountPaid > 0) {
+      _showPaymentWarningDialog(context, 'eliminar');
       return;
     }
 

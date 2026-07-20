@@ -8,6 +8,7 @@ import 'package:app_prestaya_flutter/features/loans/presentation/bloc/loans_bloc
 import 'package:app_prestaya_flutter/core/widgets/custom_input.dart';
 import 'package:app_prestaya_flutter/core/widgets/custom_button.dart';
 import 'package:intl/intl.dart';
+import 'package:app_prestaya_flutter/core/utils/permission_helper.dart';
 
 class LoanDetailPage extends StatelessWidget {
   final LoanEntity loan;
@@ -15,8 +16,46 @@ class LoanDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = (loan.currentInstallment ?? 0) / loan.installments;
-    final hasPayments = (loan.currentInstallment ?? 0) > 0 || (loan.paidAmount ?? 0) > 0;
+    // Encontrar el número máximo de cuota registrado en los pagos
+    int totalInstallmentsLimit = loan.installments;
+    for (var p in loan.payments) {
+      final regExp = RegExp(r'cuota (\d+)', caseSensitive: false);
+      final match = regExp.firstMatch(p.notes ?? '');
+      if (match != null) {
+        final num = int.tryParse(match.group(1) ?? '');
+        if (num != null && num > totalInstallmentsLimit) {
+          totalInstallmentsLimit = num;
+        }
+      }
+    }
+
+    // Calcular cuotas pagadas reales (incluyendo forzadas por nota y adicionales)
+    int effectivePaidCount = loan.currentInstallment ?? 0;
+    for (int i = effectivePaidCount + 1; i <= totalInstallmentsLimit; i++) {
+      final hasForced = loan.payments.any((p) => 
+        (p.notes ?? '').toLowerCase().contains('cuota $i') && 
+        (p.notes ?? '').toLowerCase().contains('completada')
+      );
+      final hasPayment = loan.payments.any((p) => 
+        (p.notes ?? '').toLowerCase().contains('cuota $i')
+      );
+      final isFullyPaid = (loan.paidAmount ?? 0) >= (loan.totalToPay ?? 0) - 0.01;
+      
+      if (hasForced || hasPayment || isFullyPaid) {
+        effectivePaidCount = i;
+      } else {
+        break;
+      }
+    }
+
+    // Si todas las cuotas actuales están pagadas pero no se ha pagado la totalidad, añadimos una virtual
+    final isFullyPaid = (loan.paidAmount ?? 0) >= (loan.totalToPay ?? 0) - 0.01;
+    if (effectivePaidCount == totalInstallmentsLimit && !isFullyPaid) {
+      totalInstallmentsLimit++;
+    }
+
+    final progress = totalInstallmentsLimit > 0 ? (effectivePaidCount / totalInstallmentsLimit) : 0.0;
+    final hasPayments = effectivePaidCount > 0 || (loan.paidAmount ?? 0) > 0;
 
     return BlocListener<LoansBloc, LoansState>(
       listener: (context, state) {
@@ -43,7 +82,7 @@ class LoanDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildMainInfoCard(progress),
+                    _buildMainInfoCard(progress, isFullyPaid),
                     const SizedBox(height: 30),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -52,25 +91,24 @@ class LoanDetailPage extends StatelessWidget {
                           'DETALLES DEL CRÉDITO',
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 1.2),
                         ),
-                        IconButton(
-                          onPressed: () {
-                            if (hasPayments) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('No se puede editar un préstamo con pagos registrados.'),
-                                  backgroundColor: Colors.orange,
-                                ),
-                              );
-                              return;
-                            }
-                            _showEditForm(context);
-                          },
-                          icon: const Icon(Icons.edit_outlined, size: 20, color: AppTheme.primary),
+                        PermissionHelper.guarded(
+                          context: context,
+                          permission: AppPermissions.prestamosUpdate,
+                          child: IconButton(
+                            onPressed: () {
+                              if (hasPayments) {
+                                _showPaymentWarningDialog(context, 'editar');
+                                return;
+                              }
+                              _showEditForm(context);
+                            },
+                            icon: const Icon(Icons.edit_outlined, size: 20, color: AppTheme.primary),
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 15),
-                    _buildDetailsGrid(),
+                    _buildDetailsGrid(effectivePaidCount, totalInstallmentsLimit),
                     const SizedBox(height: 30),
                     _buildActionButtons(context),
                     if (hasPayments) ...[
@@ -105,22 +143,21 @@ class LoanDetailPage extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          Positioned(
-            right: 5,
-            child: IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
-              onPressed: () {
-                if (hasPayments) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('No se puede eliminar un préstamo con pagos registrados.'),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-                  return;
-                }
-                _showDeleteConfirmation(context);
-              },
+          PermissionHelper.guarded(
+            context: context,
+            permission: AppPermissions.prestamosDelete,
+            child: Positioned(
+              right: 5,
+              child: IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
+                onPressed: () {
+                  if (hasPayments) {
+                    _showPaymentWarningDialog(context, 'eliminar');
+                    return;
+                  }
+                  _showDeleteConfirmation(context);
+                },
+              ),
             ),
           ),
           const Text(
@@ -128,6 +165,33 @@ class LoanDetailPage extends StatelessWidget {
             style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPaymentWarningDialog(BuildContext context, String action) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 10),
+            Text('Acción no permitida', style: TextStyle(color: Colors.orange)),
+          ],
+        ),
+        content: Text(
+          'No puedes $action este préstamo porque ya cuenta con pagos registrados.\n\n'
+          'Si necesitas corregir algo, deberás eliminar los pagos primero (si el sistema lo permite) o crear un nuevo registro.',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Entendido', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       ),
     );
   }
@@ -152,7 +216,7 @@ class LoanDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMainInfoCard(double progress) {
+  Widget _buildMainInfoCard(double progress, bool isFullyPaid) {
     return Container(
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
@@ -171,10 +235,17 @@ class LoanDetailPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF7ED),
+              color: isFullyPaid ? const Color(0xFFD1FAE5) : const Color(0xFFFFF7ED),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Text('Pendiente', style: TextStyle(color: Color(0xFFC2410C), fontWeight: FontWeight.bold, fontSize: 13)),
+            child: Text(
+              isFullyPaid ? 'Finalizado' : 'Pendiente', 
+              style: TextStyle(
+                color: isFullyPaid ? const Color(0xFF065F46) : const Color(0xFFC2410C), 
+                fontWeight: FontWeight.bold, 
+                fontSize: 13
+              )
+            ),
           ),
           const SizedBox(height: 25),
           const Text('Total a Pagar', style: TextStyle(color: Color(0xFF64748B), fontSize: 15)),
@@ -203,7 +274,7 @@ class LoanDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailsGrid() {
+  Widget _buildDetailsGrid(int effectivePaidCount, int totalInstallmentsLimit) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -214,11 +285,11 @@ class LoanDetailPage extends StatelessWidget {
         children: [
           _buildDetailRow('Monto Capital', 'S/ ${loan.amount.toStringAsFixed(0)}', 'Interés', '${loan.interest.toStringAsFixed(0)}%'),
           const Padding(padding: EdgeInsets.symmetric(vertical: 15), child: Divider(color: Color(0xFFF1F5F9))),
-          _buildDetailRow('Cuotas Totales', '${loan.installments}', 'Cuotas Pagadas', '${loan.currentInstallment ?? 0}'),
+          _buildDetailRow('Cuotas Totales', '$totalInstallmentsLimit', 'Cuotas Pagadas', '$effectivePaidCount'),
           const Padding(padding: EdgeInsets.symmetric(vertical: 15), child: Divider(color: Color(0xFFF1F5F9))),
           _buildDetailRow(
             'Fecha Inicio', 
-            DateFormat('dd/MM/yyyy').format(loan.dueDate.subtract(const Duration(days: 30))), 
+            DateFormat('dd/MM/yyyy').format(loan.startDate), 
             'Frecuencia', 
             _translateFrequency(loan.frequency)
           ),
@@ -262,6 +333,7 @@ class LoanDetailPage extends StatelessWidget {
   }
 
   Widget _buildActionButtons(BuildContext context) {
+    final isFullyPaid = (loan.paidAmount ?? 0) >= (loan.totalToPay ?? 0) - 0.01;
     return Row(
       children: [
         Expanded(
@@ -269,7 +341,25 @@ class LoanDetailPage extends StatelessWidget {
             label: 'Registrar Pago',
             icon: Icons.payments_outlined,
             color: const Color(0xFF10B981),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => RegisterPaymentPage(loan: loan))),
+            onTap: () {
+              if (isFullyPaid) {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Préstamo Completado'),
+                    content: const Text('Este cliente ya no tiene deuda pendiente.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Aceptar', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+                return;
+              }
+              Navigator.push(context, MaterialPageRoute(builder: (context) => RegisterPaymentPage(loan: loan)));
+            },
           ),
         ),
         const SizedBox(width: 15),
@@ -392,7 +482,7 @@ class LoanDetailPage extends StatelessWidget {
                       'interestRate': double.tryParse(interestController.text) ?? 0.0,
                       'totalInstallments': int.tryParse(installmentsController.text) ?? 1,
                       'paymentFrequency': frequency,
-                      'startDate': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                      'startDate': DateFormat('yyyy-MM-dd').format(loan.startDate),
                     };
                     context.read<LoansBloc>().add(UpdateLoanRequested(loan.id!, data));
                     Navigator.pop(modalContext);

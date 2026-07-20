@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:app_prestaya_flutter/core/theme/app_theme.dart';
 import 'package:app_prestaya_flutter/core/widgets/custom_input.dart';
@@ -7,6 +8,9 @@ import 'package:app_prestaya_flutter/core/widgets/success_dialog.dart';
 import 'package:app_prestaya_flutter/injection_container.dart';
 import 'package:app_prestaya_flutter/features/clients/presentation/bloc/clients_bloc.dart';
 import 'package:app_prestaya_flutter/features/clients/domain/entities/client_entity.dart';
+import 'package:app_prestaya_flutter/features/clients/domain/repositories/client_repository.dart';
+import 'package:app_prestaya_flutter/core/services/apis_peru_service.dart';
+import 'package:intl/intl.dart';
 
 class ClientSelectionSheet extends StatefulWidget {
   const ClientSelectionSheet({super.key});
@@ -206,57 +210,136 @@ class _ClientSelectionSheetState extends State<ClientSelectionSheet> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (modalContext) => Container(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(modalContext).viewInsets.bottom),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(25),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Registrar Nuevo Cliente', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 25),
-              CustomInput(label: 'Nombre Completo *', placeholder: 'Ej. Juan Pérez', controller: nameController),
-              Row(
+      builder: (modalContext) => StatefulBuilder(
+        builder: (stfContext, setModalState) {
+          bool isSearchingDni = false;
+          String? dniError;
+
+          Future<void> searchDni() async {
+            if (dniController.text.length != 8) return;
+
+            setModalState(() {
+              isSearchingDni = true;
+              dniError = null;
+            });
+
+            try {
+              // 1. Verificar en nuestra BD
+              final checkResult = await sl<ClientRepository>().checkDni(dniController.text);
+              bool isTaken = false;
+              checkResult.fold((_) => null, (val) => isTaken = val);
+
+              if (isTaken) {
+                setModalState(() {
+                  dniError = 'Este DNI ya está registrado';
+                  isSearchingDni = false;
+                });
+                return;
+              }
+
+              // 2. Consultar ApisPeru
+              final dniData = await sl<ApisPeruService>().getDniData(dniController.text);
+              if (dniData != null) {
+                final nombres = dniData['nombres'] ?? '';
+                final pApellido = dniData['apellidoPaterno'] ?? '';
+                final mApellido = dniData['apellidoMaterno'] ?? '';
+                final fullName = '$nombres $pApellido $mApellido'.trim().replaceAll(RegExp(r'\s+'), ' ');
+                
+                setModalState(() {
+                  nameController.text = fullName;
+                  isSearchingDni = false;
+                });
+              } else {
+                setModalState(() => isSearchingDni = false);
+                if (stfContext.mounted) {
+                  ScaffoldMessenger.of(stfContext).showSnackBar(
+                    const SnackBar(content: Text('No se encontró información para este DNI')),
+                  );
+                }
+              }
+            } catch (e) {
+              setModalState(() => isSearchingDni = false);
+            }
+          }
+
+          return Container(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(modalContext).viewInsets.bottom),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(25),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: CustomInput(label: 'DNI', placeholder: '8 dígitos', controller: dniController, keyboardType: TextInputType.number)),
-                  const SizedBox(width: 15),
-                  Expanded(child: CustomInput(label: 'Celular', placeholder: '987...', controller: phoneController, keyboardType: TextInputType.phone)),
+                  const Text('Registrar Nuevo Cliente', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 25),
+                  CustomInput(label: 'Nombre Completo *', placeholder: 'Ej. Juan Pérez', controller: nameController),
+                  CustomInput(
+                    label: 'DNI *', 
+                    placeholder: '8 dígitos', 
+                    controller: dniController, 
+                    keyboardType: TextInputType.number,
+                    errorText: dniError,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(8),
+                    ],
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.all(6.0),
+                      child: SizedBox(
+                        width: 50,
+                        child: ElevatedButton(
+                          onPressed: isSearchingDni ? null : searchDni,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: EdgeInsets.zero,
+                            elevation: 0,
+                          ),
+                          child: isSearchingDni 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.search, size: 20),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  CustomInput(label: 'Celular', placeholder: '987...', controller: phoneController, keyboardType: TextInputType.phone),
+                  CustomInput(label: 'Correo Electrónico', placeholder: 'usuario@correo.com', controller: emailController, keyboardType: TextInputType.emailAddress),
+                  CustomInput(label: 'Dirección', placeholder: 'Ej. Av. Principal 123', controller: addressController),
+                  const SizedBox(height: 25),
+                  CustomButton(
+                    title: 'Guardar y Seleccionar',
+                    onPress: () {
+                      if (nameController.text.isNotEmpty) {
+                        final newClientData = {
+                          'name': nameController.text,
+                          'dni': dniController.text,
+                          'phone': phoneController.text,
+                          'email': emailController.text,
+                          'address': addressController.text,
+                        };
+                        _clientsBloc.add(AddClient(newClientData));
+                        
+                        Navigator.pop(modalContext); // Cerrar formulario
+                        
+                        SuccessDialog.show(
+                          context,
+                          title: '¡Cliente Creado!',
+                          message: 'Ahora puedes continuar con el registro del préstamo.',
+                        );
+                      }
+                    },
+                  ),
                 ],
               ),
-              CustomInput(label: 'Correo Electrónico', placeholder: 'usuario@correo.com', controller: emailController, keyboardType: TextInputType.emailAddress),
-              CustomInput(label: 'Dirección', placeholder: 'Ej. Av. Principal 123', controller: addressController),
-              const SizedBox(height: 25),
-              CustomButton(
-                title: 'Guardar y Seleccionar',
-                onPress: () {
-                  if (nameController.text.isNotEmpty) {
-                    final newClientData = {
-                      'name': nameController.text,
-                      'dni': dniController.text,
-                      'phone': phoneController.text,
-                      'email': emailController.text,
-                      'address': addressController.text,
-                    };
-                    _clientsBloc.add(AddClient(newClientData));
-                    
-                    Navigator.pop(modalContext); // Cerrar formulario
-                    
-                    SuccessDialog.show(
-                      context,
-                      title: '¡Cliente Creado!',
-                      message: 'Ahora puedes continuar con el registro del préstamo.',
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        }
       ),
     );
   }

@@ -8,6 +8,8 @@ import 'package:app_prestaya_flutter/features/rentals/presentation/pages/add_ren
 import 'package:app_prestaya_flutter/features/rentals/presentation/bloc/rentals_bloc.dart';
 import 'package:app_prestaya_flutter/features/rentals/presentation/bloc/rentals_event.dart';
 import 'package:app_prestaya_flutter/features/stats/presentation/bloc/stats_bloc.dart';
+import 'package:app_prestaya_flutter/core/utils/permission_helper.dart';
+import 'package:app_prestaya_flutter/features/clients/presentation/pages/clients_page.dart';
 
 class RegisterOptionsSheet extends StatelessWidget {
   final Function(int)? onTabChange;
@@ -59,47 +61,66 @@ class RegisterOptionsSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 32),
-          _buildOptionCard(
-            context: context,
-            title: 'Nuevo Préstamo',
-            description: 'Registra un préstamo para un cliente existente o nuevo.',
-            icon: Icons.payments_outlined,
-            iconColor: const Color(0xFF6366F1),
-            bgColor: const Color(0xFF6366F1).withOpacity(0.1),
-            onTap: () async {
-              Navigator.pop(context);
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddLoanPage()),
-              );
-              if (result == true && context.mounted) {
-                context.read<LoansBloc>().add(LoadLoansRequested());
-                context.read<StatsBloc>().add(LoadStatsRequested());
-                if (onTabChange != null) onTabChange!(2);
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          _buildOptionCard(
-            context: context,
-            title: 'Nuevo Alquiler',
-            description: 'Registra un nuevo inquilino y su contrato de cuarto.',
-            icon: Icons.apartment_outlined,
-            iconColor: const Color(0xFF10B981),
-            bgColor: const Color(0xFF10B981).withOpacity(0.1),
-            onTap: () async {
-              Navigator.pop(context);
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddRentalPage()),
-              );
-              if (result == true && context.mounted) {
-                context.read<RentalsBloc>().add(GetRentalsRequested());
-                context.read<StatsBloc>().add(LoadStatsRequested());
-                if (onTabChange != null) onTabChange!(3);
-              }
-            },
-          ),
+          if (PermissionHelper.hasPermission(context, AppPermissions.prestamosCreate))
+            _buildOptionCard(
+              context: context,
+              title: 'Nuevo Préstamo',
+              description: 'Registra un préstamo para un cliente existente o nuevo.',
+              icon: Icons.payments_outlined,
+              iconColor: const Color(0xFF6366F1),
+              bgColor: const Color(0xFF6366F1).withOpacity(0.1),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddLoanPage()),
+                );
+                if (result == true && context.mounted) {
+                  context.read<StatsBloc>().add(LoadStatsRequested());
+                  if (onTabChange != null) onTabChange!(2);
+                }
+              },
+            ),
+          if (PermissionHelper.hasPermission(context, AppPermissions.prestamosCreate))
+            const SizedBox(height: 16),
+          
+          if (PermissionHelper.hasPermission(context, AppPermissions.alquileresCreate))
+            _buildOptionCard(
+              context: context,
+              title: 'Nuevo Alquiler',
+              description: 'Registra un nuevo inquilino y su contrato de cuarto.',
+              icon: Icons.apartment_outlined,
+              iconColor: const Color(0xFF10B981),
+              bgColor: const Color(0xFF10B981).withOpacity(0.1),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddRentalPage()),
+                );
+                if (result == true && context.mounted) {
+                  context.read<RentalsBloc>().add(GetRentalsRequested());
+                  context.read<StatsBloc>().add(LoadStatsRequested());
+                  if (onTabChange != null) onTabChange!(3);
+                }
+              },
+            ),
+          if (PermissionHelper.hasPermission(context, AppPermissions.alquileresCreate))
+            const SizedBox(height: 16),
+
+          if (PermissionHelper.hasPermission(context, AppPermissions.clientesCreate))
+            _buildOptionCard(
+              context: context,
+              title: 'Nuevo Cliente',
+              description: 'Añadir un nuevo cliente a tu base de datos.',
+              icon: Icons.person_add_outlined,
+              iconColor: const Color(0xFF8B5CF6),
+              bgColor: const Color(0xFF8B5CF6).withOpacity(0.1),
+              onTap: () async {
+                Navigator.pop(context);
+                if (onTabChange != null) onTabChange!(1);
+              },
+            ),
           const SizedBox(height: 32),
           TextButton(
             onPressed: () => Navigator.pop(context),

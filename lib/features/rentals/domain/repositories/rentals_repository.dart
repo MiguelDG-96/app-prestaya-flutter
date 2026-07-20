@@ -9,6 +9,7 @@ abstract class RentalsRepository {
     required String rentalId,
     required double amount,
     String? notes,
+    DateTime? paymentDate,
   });
   Future<Either<Failure, void>> deleteRental(String id);
   Future<Either<Failure, RentalEntity>> updateRental(String id, Map<String, dynamic> data);

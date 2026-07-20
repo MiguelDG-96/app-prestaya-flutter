@@ -11,8 +11,8 @@ class StatsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => sl<StatsBloc>()..add(LoadStatsRequested()),
+    return BlocProvider.value(
+      value: context.read<StatsBloc>(),
       child: Scaffold(
         backgroundColor: const Color(0xFFF8F9FA),
         appBar: AppBar(
