@@ -123,14 +123,15 @@ class _AddRentalPageState extends State<AddRentalPage> {
 
     _emailFocus.addListener(() async {
       final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-      if (!_emailFocus.hasFocus && emailRegex.hasMatch(_emailController.text)) {
+      final emailText = _emailController.text.trim();
+      if (!_emailFocus.hasFocus && emailText.isNotEmpty && emailRegex.hasMatch(emailText)) {
         bool shouldCheck = true;
-        if (widget.rental != null && _emailController.text == widget.rental!.tenant?.email) {
+        if (widget.rental != null && emailText == widget.rental!.tenant?.email) {
           shouldCheck = false;
         }
 
         if (shouldCheck) {
-          final result = await sl<ClientRepository>().checkEmail(_emailController.text);
+          final result = await sl<ClientRepository>().checkEmail(emailText);
           result.fold((_) => null, (isTaken) {
             if (isTaken) {
               setState(() => _emailError = 'Este correo ya está registrado');
@@ -139,6 +140,8 @@ class _AddRentalPageState extends State<AddRentalPage> {
             }
           });
         }
+      } else if (!_emailFocus.hasFocus && emailText.isEmpty) {
+        setState(() => _emailError = null);
       }
     });
   }
@@ -319,7 +322,7 @@ class _AddRentalPageState extends State<AddRentalPage> {
       _nameError = name.isEmpty ? 'El nombre es requerido' : null;
       _dniError = !dniRegex.hasMatch(dni) ? 'DNI debe tener 8 números' : null;
       _phoneError = !phoneRegex.hasMatch(phone) ? 'Celular debe tener 9 números' : null;
-      _emailError = !emailRegex.hasMatch(email) ? 'Correo inválido' : null;
+      _emailError = (email.isNotEmpty && !emailRegex.hasMatch(email)) ? 'Correo inválido' : null;
       _roomError = room.isEmpty ? 'Nº de cuarto requerido' : null;
       _rentError = double.tryParse(rentStr) == null ? 'Monto inválido' : null;
     });

@@ -9,7 +9,7 @@ class DioClient {
 
   DioClient(this._dio, this._storage) {
     _dio
-      ..options.baseUrl = 'https://servicio.teamrecios.com/api'
+      ..options.baseUrl = 'https://presta.infiny-capital.com/api'
       ..options.connectTimeout = const Duration(seconds: 30)
       ..options.receiveTimeout = const Duration(seconds: 30)
       ..options.responseType = ResponseType.json

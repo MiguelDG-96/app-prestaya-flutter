@@ -104,7 +104,7 @@ class ProfilePage extends StatelessWidget {
   Widget _buildProfileAvatar(BuildContext context, UserEntity? user) {
     final photoUrl = user?.photoUrl;
     final String? fullPhotoUrl = (photoUrl != null && photoUrl.isNotEmpty)
-        ? (photoUrl.startsWith('http') ? photoUrl : 'https://servicio.teamrecios.com$photoUrl')
+        ? (photoUrl.startsWith('http') ? photoUrl : 'https://presta.infiny-capital.com$photoUrl')
         : null;
 
     return Stack(

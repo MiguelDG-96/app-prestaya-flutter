@@ -343,8 +343,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> {
 
           emailFocus.addListener(() async {
             final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-            if (!emailFocus.hasFocus && emailRegex.hasMatch(emailController.text) && emailController.text != currentClient.email) {
-              final result = await sl<ClientRepository>().checkEmail(emailController.text);
+            final emailText = emailController.text.trim();
+            if (!emailFocus.hasFocus && emailText.isNotEmpty && emailRegex.hasMatch(emailText) && emailText != currentClient.email) {
+              final result = await sl<ClientRepository>().checkEmail(emailText);
               result.fold((_) => null, (isTaken) {
                 if (isTaken) {
                   setModalState(() => emailError = 'Este correo ya está registrado');
@@ -352,6 +353,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> {
                   setModalState(() => emailError = null);
                 }
               });
+            } else if (!emailFocus.hasFocus && emailText.isEmpty) {
+              setModalState(() => emailError = null);
             }
           });
 
@@ -444,7 +447,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> {
                         nameError = name.isEmpty ? 'El nombre es requerido' : null;
                         dniError = !dniRegex.hasMatch(dni) ? 'Debe tener 8 números' : null;
                         phoneError = !phoneRegex.hasMatch(phone) ? 'Debe tener 9 números' : null;
-                        emailError = !emailRegex.hasMatch(email) ? 'Correo inválido' : null;
+                        emailError = (email.isNotEmpty && !emailRegex.hasMatch(email)) ? 'Correo inválido' : null;
                       });
 
                       if (nameError == null && dniError == null && phoneError == null && emailError == null) {
@@ -456,7 +459,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> {
                           final check = await sl<ClientRepository>().checkDni(dni);
                           check.fold((_) => null, (val) => isDniTaken = val);
                         }
-                        if (email != currentClient.email) {
+                        if (email.isNotEmpty && email != currentClient.email) {
                           final check = await sl<ClientRepository>().checkEmail(email);
                           check.fold((_) => null, (val) => isEmailTaken = val);
                         }

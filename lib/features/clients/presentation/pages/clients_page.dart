@@ -377,8 +377,9 @@ class _ClientsPageState extends State<ClientsPage> {
 
           emailFocus.addListener(() async {
             final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-            if (!emailFocus.hasFocus && emailRegex.hasMatch(emailController.text)) {
-              final result = await sl<ClientRepository>().checkEmail(emailController.text);
+            final emailText = emailController.text.trim();
+            if (!emailFocus.hasFocus && emailText.isNotEmpty && emailRegex.hasMatch(emailText)) {
+              final result = await sl<ClientRepository>().checkEmail(emailText);
               result.fold((_) => null, (isTaken) {
                 if (isTaken) {
                   setModalState(() => emailError = 'Este correo ya está registrado');
@@ -386,6 +387,8 @@ class _ClientsPageState extends State<ClientsPage> {
                   setModalState(() => emailError = null);
                 }
               });
+            } else if (!emailFocus.hasFocus && emailText.isEmpty) {
+              setModalState(() => emailError = null);
             }
           });
 
@@ -481,19 +484,21 @@ class _ClientsPageState extends State<ClientsPage> {
                         nameError = name.isEmpty ? 'El nombre es requerido' : null;
                         dniError = !dniRegex.hasMatch(dni) ? 'Debe tener 8 números' : null;
                         phoneError = !phoneRegex.hasMatch(phone) ? 'Debe tener 9 números' : null;
-                        emailError = !emailRegex.hasMatch(email) ? 'Correo inválido' : null;
+                        emailError = (email.isNotEmpty && !emailRegex.hasMatch(email)) ? 'Correo inválido' : null;
                       });
 
                       if (nameError == null && dniError == null && phoneError == null && emailError == null) {
                         // Verificación final antes de enviar
                         final checkDni = await sl<ClientRepository>().checkDni(dni);
-                        final checkEmail = await sl<ClientRepository>().checkEmail(email);
-
                         bool isDniTaken = false;
                         bool isEmailTaken = false;
 
                         checkDni.fold((_) => null, (val) => isDniTaken = val);
-                        checkEmail.fold((_) => null, (val) => isEmailTaken = val);
+
+                        if (email.isNotEmpty) {
+                          final checkEmail = await sl<ClientRepository>().checkEmail(email);
+                          checkEmail.fold((_) => null, (val) => isEmailTaken = val);
+                        }
 
                         if (isDniTaken || isEmailTaken) {
                           setModalState(() {
